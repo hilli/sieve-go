@@ -6,20 +6,30 @@ import (
 )
 
 func TestNextToken(t *testing.T) {
-	input := `=+(){},;`
+	input := `require [ "fileinto" ];
+	if address :matches "From" "test@example.com" {
+		fileinto "INBOX.test";
+	}`
 
 	tests := []struct {
 		expectedType    token.TokenType
 		expectedLiteral string
 	}{
-		{token.ASSIGN, "="},
-		{token.PLUS, "+"},
-		{token.LPAREN, "("},
-		{token.RPAREN, ")"},
-		{token.LBRACE, "{"},
-		{token.RBRACE, "}"},
-		{token.COMMA, ","},
+		{token.REQUIRE, "require"},
+		{token.LBRACK, "["},
+		{token.STRING, "fileinto"},
+		{token.RBRACK, "]"},
 		{token.SEMICOLON, ";"},
+		{token.IF, "if"},
+		{token.IDENT, "address"},
+		{token.MATCHES, ":matches"},
+		{token.STRING, "From"},
+		{token.STRING, "test@example.com"},
+		{token.LBRACE, "{"},
+		{token.IDENT, "fileinto"},
+		{token.STRING, "INBOX.test"},
+		{token.SEMICOLON, ";"},
+		{token.RBRACE, "}"},
 		{token.EOF, ""},
 	}
 

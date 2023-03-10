@@ -12,7 +12,8 @@ const (
 	EOF     = "EOF"
 
 	// Identifiers + literals
-	IDENT = "IDENT" //
+	IDENT  = "IDENT"  // add, foobar, x, y, ...
+	STRING = "STRING" //
 	INT   = "INT"   // 12345
 
 	// Operators
@@ -32,7 +33,26 @@ const (
 
 	// Keywords
 	IF       = "IF"
+	ADDRESS  = "ADDRESS"
 	MATCHES  = ":MATCHES"
 	IS       = ":IS"
 	CONTAINS = ":CONTAINS"
+	REQUIRE = "REQUIRE"
 )
+
+
+var keywords = map[string]TokenType{
+	"require":  REQUIRE,
+	"if":       IF,
+	"address":  ADDRESS,
+	"matches":  MATCHES,
+	"is":       IS,
+	"contains": CONTAINS,
+}
+
+func LookupIdent(ident string) TokenType {
+	if tok, ok := keywords[ident]; ok {
+		return tok
+	}
+	return IDENT
+}
