@@ -121,11 +121,13 @@ type Handler interface {
 
 // Registry holds registered actions, tests, and capabilities.
 type Registry struct {
-	mu          sync.RWMutex
-	actions     map[string]actionEntry
-	tests       map[string]testEntry
-	matchTypes  map[string]matchTypeEntry
-	comparators map[string]comparatorEntry
+	mu           sync.RWMutex
+	actions      map[string]actionEntry
+	tests        map[string]testEntry
+	matchTypes   map[string]matchTypeEntry
+	comparators  map[string]comparatorEntry
+	addressParts map[string]addressPartEntry
+	commands     map[string]commandEntry
 	// caps is the set of capabilities considered "available" by this
 	// registry. Core capabilities (none for RFC 5228 base) plus anything
 	// registered with a non-empty Requires.
@@ -168,12 +170,62 @@ type comparatorEntry struct {
 
 func New() *Registry {
 	return &Registry{
-		actions:     map[string]actionEntry{},
-		tests:       map[string]testEntry{},
-		matchTypes:  map[string]matchTypeEntry{},
-		comparators: map[string]comparatorEntry{},
-		caps:        map[string]bool{},
+		actions:      map[string]actionEntry{},
+		tests:        map[string]testEntry{},
+		matchTypes:   map[string]matchTypeEntry{},
+		comparators:  map[string]comparatorEntry{},
+		addressParts: map[string]addressPartEntry{},
+		commands:     map[string]commandEntry{},
+		caps:         map[string]bool{},
 	}
+}
+
+// CommandFunc implements a Sieve control-flow command (e.g. foreverypart
+// from RFC 5703). It receives the parsed args, the script block lexically
+// nested under the command, and an exec callback to (recursively) run a
+// block in the same execution state.
+//
+// Use ctx.Stop() to abort the whole script. To break out of a containing
+// loop, return ErrBreak (with an optional label via BreakError).
+type CommandFunc func(ctx Context, args *ast.Arguments, block []*ast.Command, exec func([]*ast.Command) error) error
+
+type commandEntry struct {
+	fn       CommandFunc
+	requires string
+}
+
+// RegisterCommand adds a control-flow command. requires, if non-empty,
+// names the capability scripts must `require` to use it.
+func (r *Registry) RegisterCommand(name string, fn CommandFunc, requires string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.commands[name] = commandEntry{fn: fn, requires: requires}
+	if requires != "" {
+		r.caps[requires] = true
+	}
+}
+
+// LookupCommand returns the command and its required capability.
+func (r *Registry) LookupCommand(name string) (CommandFunc, string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.commands[name]
+	if !ok {
+		return nil, "", false
+	}
+	return e.fn, e.requires, true
+}
+
+// BreakError is the sentinel returned by an action to unwind the
+// innermost enclosing foreverypart loop. Containing commands check for
+// this error type and stop iterating without propagating the error.
+type BreakError struct{ Label string }
+
+func (e *BreakError) Error() string {
+	if e.Label == "" {
+		return "break"
+	}
+	return "break :name " + e.Label
 }
 
 // RegisterAction adds an action. If requires is non-empty, scripts must
@@ -270,6 +322,41 @@ func (r *Registry) LookupComparator(name string) (Comparator, string, bool) {
 		return nil, "", false
 	}
 	return e.cmp, e.requires, true
+}
+
+// AddressPartFunc returns the requested part of an RFC 5321 address.
+// Implementations receive the full addr-spec (e.g. "alice+filter@x.y")
+// and return the desired part.
+type AddressPartFunc func(addr string) string
+
+type addressPartEntry struct {
+	fn       AddressPartFunc
+	requires string
+}
+
+// RegisterAddressPart adds an address-part tag (e.g. ":localpart",
+// ":user"). name MUST include the leading colon.
+func (r *Registry) RegisterAddressPart(name string, fn AddressPartFunc, requires string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.addressParts == nil {
+		r.addressParts = map[string]addressPartEntry{}
+	}
+	r.addressParts[name] = addressPartEntry{fn: fn, requires: requires}
+	if requires != "" {
+		r.caps[requires] = true
+	}
+}
+
+// LookupAddressPart returns the function for an address-part tag.
+func (r *Registry) LookupAddressPart(name string) (AddressPartFunc, string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.addressParts[name]
+	if !ok {
+		return nil, "", false
+	}
+	return e.fn, e.requires, true
 }
 
 // ErrUnknown is returned by validation when a command or test is not in

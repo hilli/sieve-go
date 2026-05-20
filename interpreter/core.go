@@ -34,6 +34,25 @@ func RegisterCore(r *registry.Registry) {
 	// i;octet is the only other mandatory-to-implement comparator.
 	r.RegisterComparator("i;ascii-casemap", asciiCasemap{}, "")
 	r.RegisterComparator("i;octet", octet{}, "")
+
+	// Address parts (RFC 5228 §2.7.4). Extensions like subaddress add more.
+	r.RegisterAddressPart(":all", func(a string) string { return a }, "")
+	r.RegisterAddressPart(":localpart", addressLocal, "")
+	r.RegisterAddressPart(":domain", addressDomain, "")
+}
+
+func addressLocal(a string) string {
+	if at := strings.LastIndexByte(a, '@'); at >= 0 {
+		return a[:at]
+	}
+	return a
+}
+
+func addressDomain(a string) string {
+	if at := strings.LastIndexByte(a, '@'); at >= 0 {
+		return a[at+1:]
+	}
+	return ""
 }
 
 // ---------- actions ----------
@@ -122,18 +141,13 @@ func testHeader(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool,
 	if err != nil {
 		return false, err
 	}
-	matcher := LookupMatcher(ctx, args)
+	matcher := LookupSetMatcher(ctx, args)
 	msg := ctx.Message()
+	var values []string
 	for _, hn := range names {
-		for _, v := range msg.Header(hn) {
-			for _, k := range keys {
-				if matcher(v, k) {
-					return true, nil
-				}
-			}
-		}
+		values = append(values, msg.Header(hn)...)
 	}
-	return false, nil
+	return matcher(values, keys), nil
 }
 
 // testAddress implements `address [ADDRESS-PART] [MATCH-TYPE] <header-list> <key-list>`.
@@ -142,9 +156,10 @@ func testAddress(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool
 	if err != nil {
 		return false, err
 	}
-	matcher := LookupMatcher(ctx, args)
-	ap := addressPartOf(args)
+	matcher := LookupSetMatcher(ctx, args)
+	ap := AddressPart(ctx, args)
 	msg := ctx.Message()
+	var parts []string
 	for _, hn := range names {
 		for _, raw := range msg.Header(hn) {
 			addrs, err := mail.ParseAddressList(raw)
@@ -152,16 +167,11 @@ func testAddress(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool
 				continue
 			}
 			for _, a := range addrs {
-				part := addressPartString(a.Address, ap)
-				for _, k := range keys {
-					if matcher(part, k) {
-						return true, nil
-					}
-				}
+				parts = append(parts, ap(a.Address))
 			}
 		}
 	}
-	return false, nil
+	return matcher(parts, keys), nil
 }
 
 // testEnvelope mirrors testAddress but reads from msg.Envelope.
@@ -170,20 +180,16 @@ func testEnvelope(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (boo
 	if err != nil {
 		return false, err
 	}
-	matcher := LookupMatcher(ctx, args)
-	ap := addressPartOf(args)
+	matcher := LookupSetMatcher(ctx, args)
+	ap := AddressPart(ctx, args)
 	msg := ctx.Message()
+	var parts []string
 	for _, hn := range names {
 		for _, raw := range msg.Envelope(hn) {
-			part := addressPartString(raw, ap)
-			for _, k := range keys {
-				if matcher(part, k) {
-					return true, nil
-				}
-			}
+			parts = append(parts, ap(raw))
 		}
 	}
-	return false, nil
+	return matcher(parts, keys), nil
 }
 
 // TestEnvelope is exposed so the envelope extension package can register
@@ -285,14 +291,15 @@ func LookupMatcher(ctx registry.Context, args *ast.Arguments) registry.MatchType
 }
 
 func twoStringLists(args *ast.Arguments, name string) ([]string, []string, error) {
-	if len(args.Positional) != 2 {
-		return nil, nil, fmt.Errorf("%s: expected 2 positional arguments, got %d", name, len(args.Positional))
+	pos := FreePositional(args)
+	if len(pos) != 2 {
+		return nil, nil, fmt.Errorf("%s: expected 2 positional arguments, got %d", name, len(pos))
 	}
-	a, ok := stringsOf(args.Positional[0])
+	a, ok := stringsOf(pos[0])
 	if !ok {
 		return nil, nil, fmt.Errorf("%s: first argument must be string or string list", name)
 	}
-	b, ok := stringsOf(args.Positional[1])
+	b, ok := stringsOf(pos[1])
 	if !ok {
 		return nil, nil, fmt.Errorf("%s: second argument must be string or string list", name)
 	}

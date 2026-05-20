@@ -123,6 +123,19 @@ func (i *Interpreter) validateCommands(cmds []*ast.Command, caps map[string]bool
 		case "stop":
 			// no args, no block
 		default:
+			// Control-flow command first.
+			if cfn, req, ok := i.reg.LookupCommand(c.Name); ok {
+				_ = cfn
+				if req != "" && !caps[req] {
+					return fmt.Errorf("command %q at %d:%d requires capability %q (add to `require`)", c.Name, c.Pos.Line, c.Pos.Col, req)
+				}
+				if c.HasBlock {
+					if err := i.validateCommands(c.Block, caps); err != nil {
+						return err
+					}
+				}
+				continue
+			}
 			_, req, ok := i.reg.LookupAction(c.Name)
 			if !ok {
 				return fmt.Errorf("unknown action %q at %d:%d", c.Name, c.Pos.Line, c.Pos.Col)
@@ -240,13 +253,31 @@ func (i *Interpreter) execBlock(cmds []*ast.Command, st *state) error {
 			return errStop
 		default:
 			skipChain = false
-			fn, _, ok := i.reg.LookupAction(c.Name)
-			if !ok {
-				return fmt.Errorf("unknown action %q at %d:%d", c.Name, c.Pos.Line, c.Pos.Col)
-			}
-			a := expandArgs(&c.Args, st.vars)
-			if err := fn(st, a); err != nil {
-				return fmt.Errorf("%s: %w", c.Name, err)
+			// Look up control-flow commands first (e.g. foreverypart).
+			if cfn, _, ok := i.reg.LookupCommand(c.Name); ok {
+				if err := cfn(st, &c.Args, c.Block, func(b []*ast.Command) error {
+					return i.execBlock(b, st)
+				}); err != nil {
+					if _, isBreak := err.(*registry.BreakError); isBreak {
+						return err // propagate up to the nearest loop
+					}
+					if err == errStop {
+						return err
+					}
+					return fmt.Errorf("%s: %w", c.Name, err)
+				}
+			} else {
+				fn, _, ok := i.reg.LookupAction(c.Name)
+				if !ok {
+					return fmt.Errorf("unknown action %q at %d:%d", c.Name, c.Pos.Line, c.Pos.Col)
+				}
+				a := expandArgs(&c.Args, st.vars)
+				if err := fn(st, a); err != nil {
+					if _, isBreak := err.(*registry.BreakError); isBreak {
+						return err // propagate raw so the loop sees it
+					}
+					return fmt.Errorf("%s: %w", c.Name, err)
+				}
 			}
 		}
 		if st.stopped {
@@ -264,18 +295,29 @@ type state struct {
 	explicit bool
 	stopped  bool
 	vars     *registry.Variables
+	// part, if non-nil, is the current MIME part inside a foreverypart
+	// loop. Tests like header/exists in mime-aware mode use this.
+	part message.MIMEPart
 }
 
-func (s *state) Message() message.Message    { return s.msg }
-func (s *state) Handler() registry.Handler   { return s.handler }
-func (s *state) MarkExplicitAction()         { s.explicit = true }
-func (s *state) Stop()                       { s.stopped = true }
+func (s *state) Message() message.Message  { return s.msg }
+func (s *state) Handler() registry.Handler { return s.handler }
+func (s *state) MarkExplicitAction()       { s.explicit = true }
+func (s *state) Stop()                     { s.stopped = true }
 func (s *state) Variables() *registry.Variables {
 	if s.vars == nil {
 		s.vars = registry.NewVariables()
 	}
 	return s.vars
 }
+
+// CurrentPart returns the MIME part being iterated by an enclosing
+// foreverypart loop, or nil when no such loop is active.
+func (s *state) CurrentPart() message.MIMEPart { return s.part }
+
+// SetCurrentPart updates the current MIME part; intended for use by the
+// mime extension's foreverypart implementation.
+func (s *state) SetCurrentPart(p message.MIMEPart) { s.part = p }
 
 func (s *state) EvalTest(t *ast.Test) (bool, error) {
 	switch t.Name {
@@ -331,7 +373,25 @@ func stringsOf(v ast.Value) ([]string, bool) {
 	return nil, false
 }
 
-// addressPart is determined by :localpart / :domain / :all (default :all).
+// AddressPart returns the function for whichever address-part tag is
+// present in args (e.g. :localpart, :domain, :user, :detail) — falling
+// back to the identity (`:all`) when none is set. Extensions register
+// their own parts via registry.RegisterAddressPart.
+func AddressPart(ctx registry.Context, args *ast.Arguments) registry.AddressPartFunc {
+	reg := ctx.(*state).reg
+	for _, tg := range args.Tags {
+		if fn, _, ok := reg.LookupAddressPart(strings.ToLower(tg.Name)); ok {
+			return fn
+		}
+	}
+	if fn, _, ok := reg.LookupAddressPart(":all"); ok {
+		return fn
+	}
+	return func(a string) string { return a }
+}
+
+// addressPartOf / addressPartString remain for backwards compatibility
+// within the interpreter package; new code should use AddressPart above.
 type addressPart int
 
 const (
@@ -339,17 +399,3 @@ const (
 	addrLocal
 	addrDomain
 )
-
-func addressPartOf(args *ast.Arguments) addressPart {
-	for _, tg := range args.Tags {
-		switch strings.ToLower(tg.Name) {
-		case ":localpart":
-			return addrLocal
-		case ":domain":
-			return addrDomain
-		case ":all":
-			return addrAll
-		}
-	}
-	return addrAll
-}

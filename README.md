@@ -32,7 +32,12 @@ Bundled extensions:
 | `extensions/imap4flags`       | `imap4flags` | RFC 5232 (full)               |
 | `extensions/variables`        | `variables`  | RFC 5229                      |
 | `extensions/regex`            | `regex`      | draft-ietf-sieve-regex        |
-| `extensions/mime`             | `mime`       | RFC 5703 (`:mime` / `:anychild`) |
+| `extensions/mime`             | `mime`       | RFC 5703 (`:mime` / `:anychild` / `foreverypart` / `break` / `extracttext` / `replace` / `enclose`) |
+| `extensions/reject`           | `reject`, `ereject` | RFC 5429              |
+| `extensions/editheader`       | `editheader` | RFC 5293 (`addheader` / `deleteheader`) |
+| `extensions/vacation`         | `vacation`   | RFC 5230                      |
+| `extensions/subaddress`       | `subaddress` | RFC 5233 (`:user` / `:detail`) |
+| `extensions/relational`       | `relational` | RFC 5231 (`:count` / `:value`) |
 
 The core also honours the standard `:comparator` tag with the
 `i;ascii-casemap` (default) and `i;octet` comparators from RFC 4790.
@@ -171,7 +176,12 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 │   ├── imap4flags/     RFC 5232
 │   ├── variables/      RFC 5229
 │   ├── regex/          draft-ietf-sieve-regex
-│   └── mime/           RFC 5703 (subset)
+│   ├── mime/           RFC 5703 (`:mime`, `:anychild`, `foreverypart`, …)
+│   ├── reject/         RFC 5429
+│   ├── editheader/     RFC 5293
+│   ├── vacation/       RFC 5230
+│   ├── subaddress/     RFC 5233
+│   └── relational/     RFC 5231
 ├── examples/
 │   ├── simple/         embed the library
 │   └── validate/       stdin → ok / error CLI
@@ -185,15 +195,16 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 Known unimplemented pieces — each one fails loudly (validation error,
 runtime error, or simply doesn't fire) rather than silently mismatching:
 
-* **RFC 5703 (`mime`) control flow** — only the `:mime` / `:anychild`
-  tags ship. `foreverypart`, `break`, `replace`, `enclose`, and
-  `extracttext` are not registered, so scripts using them fail
-  validation as unknown commands. (Adding them requires a new
-  `RegisterCommand` mechanism in the registry.)
-* **Other IANA extensions** — `include`, `reject`, `vacation`,
-  `editheader`, `notify`, `relational`, `subaddress`, etc. are not
-  built. The registry is the extension point — see
-  `docs/extensions.md`.
+* **`include` (RFC 6609)** — needs a host-supplied script loader
+  callback to resolve `:personal` / `:global` scripts. Left as a
+  follow-up so the design can land alongside a concrete embedding.
+* **`notify` (RFC 5435)** — requires per-method URI dispatch (xmpp:,
+  mailto:, sms:, …). Same reasoning: best shipped with a real host
+  binding rather than a placeholder.
+* **`environment` (RFC 5183)**, **`date` / `currentdate` (RFC 5260)**,
+  **`spamtest` / `virustest` (RFC 5235)**, and a handful of niche IANA
+  capabilities — not yet built. The registry is the extension point;
+  see `docs/extensions.md` and `docs/ai-implementation-guide.md`.
 
 These are good first contributions if you want to dig in.
 
@@ -204,5 +215,10 @@ These are good first contributions if you want to dig in.
 * [RFC 5232](https://www.rfc-editor.org/rfc/rfc5232) — fileinto, imap4flags
 * [RFC 5173](https://www.rfc-editor.org/rfc/rfc5173) — body
 * [RFC 5703](https://www.rfc-editor.org/rfc/rfc5703) — MIME part tests
+* [RFC 5429](https://www.rfc-editor.org/rfc/rfc5429) — reject / ereject
+* [RFC 5293](https://www.rfc-editor.org/rfc/rfc5293) — editheader
+* [RFC 5230](https://www.rfc-editor.org/rfc/rfc5230) — vacation
+* [RFC 5233](https://www.rfc-editor.org/rfc/rfc5233) — subaddress
+* [RFC 5231](https://www.rfc-editor.org/rfc/rfc5231) — relational
 * [IANA Sieve Extensions](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml)
 * [Writing An Interpreter In Go](https://interpreterbook.com) — overall design inspiration

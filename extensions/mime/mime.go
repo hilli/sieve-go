@@ -46,6 +46,11 @@ func Register(i *sieve.Interpreter) {
 	r.RegisterTest("header", testHeader, Capability)
 	r.RegisterTest("address", testAddress, Capability)
 	r.RegisterTest("exists", testExists, Capability)
+	r.RegisterCommand("foreverypart", commandForeverypart, Capability)
+	r.RegisterAction("break", actionBreak, Capability)
+	r.RegisterAction("extracttext", actionExtractText, Capability)
+	r.RegisterAction("replace", actionReplace, Capability)
+	r.RegisterAction("enclose", actionEnclose, Capability)
 }
 
 func init() { Register(sieve.Default()) }
@@ -85,16 +90,27 @@ func testHeader(ctx registry.Context, args *ast.Arguments, children []*ast.Test)
 	if err != nil {
 		return false, err
 	}
-	if mode == modeNormal || mode == modeTopLevel {
-		// Top-level part headers are the same as the message headers.
+	if mode == modeNormal {
 		return interpreter.TestHeader(ctx, args, children)
 	}
+	if mode == modeTopLevel {
+		// Inside foreverypart, :mime targets the current iteration part
+		// (RFC 5703 §3); otherwise it's the top-level part (== message).
+		if cp := interpreter.CurrentPart(ctx); cp != nil {
+			return headerMatchParts(ctx, args, []message.MIMEPart{cp})
+		}
+		return interpreter.TestHeader(ctx, args, children)
+	}
+	return headerMatchParts(ctx, args, mimeParts(ctx))
+}
+
+func headerMatchParts(ctx registry.Context, args *ast.Arguments, parts []message.MIMEPart) (bool, error) {
 	names, keys, err := twoStringLists(args, "header")
 	if err != nil {
 		return false, err
 	}
 	matcher := interpreter.LookupMatcher(ctx, args)
-	for _, p := range mimeParts(ctx) {
+	for _, p := range parts {
 		for _, hn := range names {
 			for _, v := range p.Header(hn) {
 				for _, k := range keys {
