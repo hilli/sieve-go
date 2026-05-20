@@ -20,7 +20,12 @@ RFC 5228 core implemented:
 * address parts: `:all`, `:localpart`, `:domain`
 * combinators: `allof`, `anyof`, `not`, `true`, `false`
 * `validate` separate from `run`
-* example extension: `fileinto` (RFC 5232)
+* example extensions:
+  * `fileinto` (RFC 5232)
+  * `envelope` (RFC 5228 §5.4 capability)
+  * `body` (RFC 5173) — `:raw` / `:text`
+  * `imap4flags` (RFC 5232) — `setflag`/`addflag`/`removeflag`/`hasflag`
+  * `regex` (draft-ietf-sieve-regex) — `:regex` match type
 
 ## Install
 
@@ -117,7 +122,11 @@ the registry-based design lets each be added as a self-contained package.
 ├── interpreter/    AST walker + RFC 5228 builtins
 ├── message/        Message interface + net/mail adapter + Builder
 ├── extensions/
-│   └── fileinto/   RFC 5232
+│   ├── fileinto/   RFC 5232
+│   ├── envelope/   RFC 5228 §5.4
+│   ├── body/       RFC 5173
+│   ├── imap4flags/ RFC 5232 (subset)
+│   └── regex/      draft-ietf-sieve-regex
 └── examples/
     ├── simple/     embed library, run script
     └── validate/   validate-only CLI

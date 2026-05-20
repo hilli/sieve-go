@@ -9,9 +9,9 @@ import (
 	"sieve/registry"
 )
 
-// RegisterCore registers the RFC 5228 built-in actions and tests onto
-// the given registry. None of these require a capability — they are
-// always available.
+// RegisterCore registers the RFC 5228 built-in actions, tests, and match
+// types onto the given registry. None of these require a capability —
+// they are always available.
 func RegisterCore(r *registry.Registry) {
 	// Actions.
 	r.RegisterAction("keep", actionKeep, "")
@@ -23,9 +23,12 @@ func RegisterCore(r *registry.Registry) {
 	r.RegisterTest("header", testHeader, "")
 	r.RegisterTest("exists", testExists, "")
 	r.RegisterTest("size", testSize, "")
-	// envelope is technically a separate extension (RFC 5228 §5.4 + an
-	// envelope capability), but we provide it under the "envelope" cap.
-	r.RegisterTest("envelope", testEnvelope, "envelope")
+
+	// Match types. Default per RFC 5228 §2.7.1 is :is; the lookup helper
+	// falls back to :is if no match-type tag is present.
+	r.RegisterMatchType(":is", matchIs, "")
+	r.RegisterMatchType(":contains", matchContains, "")
+	r.RegisterMatchType(":matches", matchMatches, "")
 }
 
 // ---------- actions ----------
@@ -60,12 +63,12 @@ func testHeader(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool,
 	if err != nil {
 		return false, err
 	}
-	mk := matchKindOf(args)
+	matcher := LookupMatcher(ctx, args)
 	msg := ctx.Message()
 	for _, hn := range names {
 		for _, v := range msg.Header(hn) {
 			for _, k := range keys {
-				if matchString(v, k, mk) {
+				if matcher(v, k) {
 					return true, nil
 				}
 			}
@@ -80,7 +83,7 @@ func testAddress(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool
 	if err != nil {
 		return false, err
 	}
-	mk := matchKindOf(args)
+	matcher := LookupMatcher(ctx, args)
 	ap := addressPartOf(args)
 	msg := ctx.Message()
 	for _, hn := range names {
@@ -92,7 +95,7 @@ func testAddress(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool
 			for _, a := range addrs {
 				part := addressPartString(a.Address, ap)
 				for _, k := range keys {
-					if matchString(part, k, mk) {
+					if matcher(part, k) {
 						return true, nil
 					}
 				}
@@ -108,14 +111,14 @@ func testEnvelope(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (boo
 	if err != nil {
 		return false, err
 	}
-	mk := matchKindOf(args)
+	matcher := LookupMatcher(ctx, args)
 	ap := addressPartOf(args)
 	msg := ctx.Message()
 	for _, hn := range names {
 		for _, raw := range msg.Envelope(hn) {
 			part := addressPartString(raw, ap)
 			for _, k := range keys {
-				if matchString(part, k, mk) {
+				if matcher(part, k) {
 					return true, nil
 				}
 			}
@@ -123,6 +126,10 @@ func testEnvelope(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (boo
 	}
 	return false, nil
 }
+
+// TestEnvelope is exposed so the envelope extension package can register
+// it without duplicating logic.
+var TestEnvelope = testEnvelope
 
 // testExists is true iff every named header is present at least once.
 func testExists(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, error) {
@@ -165,6 +172,23 @@ func testSize(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, e
 
 // ---------- helpers ----------
 
+// LookupMatcher returns the matcher function selected by the first
+// match-type tag in args; defaults to :is when no match-type tag is
+// present. It looks up via the interpreter's registry so extension match
+// types (e.g. :regex) work transparently.
+func LookupMatcher(ctx registry.Context, args *ast.Arguments) registry.MatchTypeFunc {
+	reg := ctx.(*state).reg
+	for _, tg := range args.Tags {
+		if fn, _, ok := reg.LookupMatchType(strings.ToLower(tg.Name)); ok {
+			return fn
+		}
+	}
+	if fn, _, ok := reg.LookupMatchType(":is"); ok {
+		return fn
+	}
+	return matchIs
+}
+
 func twoStringLists(args *ast.Arguments, name string) ([]string, []string, error) {
 	if len(args.Positional) != 2 {
 		return nil, nil, fmt.Errorf("%s: expected 2 positional arguments, got %d", name, len(args.Positional))
@@ -198,20 +222,11 @@ func addressPartString(addr string, p addressPart) string {
 	}
 }
 
-// matchString implements the three match types using ASCII case-insensitive
-// comparison (the default :comparator "i;ascii-casemap" per RFC 5228 §2.7.3).
-// :matches uses ? and * wildcards (no character classes).
-func matchString(s, key string, mk matchKind) bool {
-	switch mk {
-	case matchIs:
-		return strings.EqualFold(s, key)
-	case matchContains:
-		return strings.Contains(strings.ToLower(s), strings.ToLower(key))
-	case matchMatches:
-		return wildcardMatch(strings.ToLower(s), strings.ToLower(key))
-	}
-	return false
-}
+// matchIs/matchContains/matchMatches implement the RFC 5228 builtin
+// match types using the default i;ascii-casemap comparator.
+func matchIs(s, key string) bool       { return strings.EqualFold(s, key) }
+func matchContains(s, key string) bool { return strings.Contains(strings.ToLower(s), strings.ToLower(key)) }
+func matchMatches(s, key string) bool  { return wildcardMatch(strings.ToLower(s), strings.ToLower(key)) }
 
 // wildcardMatch implements the RFC 5228 :matches glob: '?' matches any
 // single character, '*' matches zero or more characters; '\' escapes.

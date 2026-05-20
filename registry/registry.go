@@ -56,9 +56,10 @@ type Handler interface {
 
 // Registry holds registered actions, tests, and capabilities.
 type Registry struct {
-	mu      sync.RWMutex
-	actions map[string]actionEntry
-	tests   map[string]testEntry
+	mu         sync.RWMutex
+	actions    map[string]actionEntry
+	tests      map[string]testEntry
+	matchTypes map[string]matchTypeEntry
 	// caps is the set of capabilities considered "available" by this
 	// registry. Core capabilities (none for RFC 5228 base) plus anything
 	// registered with a non-empty Requires.
@@ -75,11 +76,23 @@ type testEntry struct {
 	requires string
 }
 
+// MatchTypeFunc compares an actual value against a key per the semantics
+// of a particular match-type tag (e.g. :is, :contains, :matches, :regex).
+// Inputs are pre-decoded strings; comparators (case folding etc.) are the
+// matcher's responsibility for now.
+type MatchTypeFunc func(value, key string) bool
+
+type matchTypeEntry struct {
+	fn       MatchTypeFunc
+	requires string
+}
+
 func New() *Registry {
 	return &Registry{
-		actions: map[string]actionEntry{},
-		tests:   map[string]testEntry{},
-		caps:    map[string]bool{},
+		actions:    map[string]actionEntry{},
+		tests:      map[string]testEntry{},
+		matchTypes: map[string]matchTypeEntry{},
+		caps:       map[string]bool{},
 	}
 }
 
@@ -131,6 +144,29 @@ func (r *Registry) HasCapability(name string) bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.caps[name]
+}
+
+// RegisterMatchType adds a match-type tag (e.g. ":is", ":regex"). The
+// name MUST include the leading colon. If requires is non-empty, scripts
+// must `require "<cap>";` to use the tag.
+func (r *Registry) RegisterMatchType(name string, fn MatchTypeFunc, requires string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.matchTypes[name] = matchTypeEntry{fn: fn, requires: requires}
+	if requires != "" {
+		r.caps[requires] = true
+	}
+}
+
+// LookupMatchType returns the matcher and its required capability.
+func (r *Registry) LookupMatchType(name string) (MatchTypeFunc, string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.matchTypes[name]
+	if !ok {
+		return nil, "", false
+	}
+	return e.fn, e.requires, true
 }
 
 // ErrUnknown is returned by validation when a command or test is not in

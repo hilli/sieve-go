@@ -11,7 +11,6 @@ import (
 	"sieve/message"
 	"sieve/registry"
 )
-
 // Interpreter holds a registry and can compile/run scripts against it.
 // One Interpreter is safe for concurrent use by multiple goroutines as
 // long as no further registration happens after first use.
@@ -163,6 +162,16 @@ func (i *Interpreter) validateTest(t *ast.Test, caps map[string]bool) error {
 		if req != "" && !caps[req] {
 			return fmt.Errorf("test %q at %d:%d requires capability %q (add to `require`)", t.Name, t.Pos.Line, t.Pos.Col, req)
 		}
+		// Validate any match-type tags' capabilities. Other tags (address
+		// parts, comparator, body transforms, ...) are still resolved
+		// lazily at run time.
+		for _, tg := range t.Args.Tags {
+			if _, mreq, ok := i.reg.LookupMatchType(strings.ToLower(tg.Name)); ok {
+				if mreq != "" && !caps[mreq] {
+					return fmt.Errorf("match type %q at %d:%d requires capability %q (add to `require`)", tg.Name, tg.Pos.Line, tg.Pos.Col, mreq)
+				}
+			}
+		}
 		return nil
 	}
 }
@@ -311,30 +320,6 @@ func stringsOf(v ast.Value) ([]string, bool) {
 		return x.Values, true
 	}
 	return nil, false
-}
-
-// matchKind is determined by the :is / :contains / :matches tag set on
-// the test. Default per RFC 5228 §2.7.1 is :is.
-type matchKind int
-
-const (
-	matchIs matchKind = iota
-	matchContains
-	matchMatches
-)
-
-func matchKindOf(args *ast.Arguments) matchKind {
-	for _, tg := range args.Tags {
-		switch strings.ToLower(tg.Name) {
-		case ":is":
-			return matchIs
-		case ":contains":
-			return matchContains
-		case ":matches":
-			return matchMatches
-		}
-	}
-	return matchIs
 }
 
 // addressPart is determined by :localpart / :domain / :all (default :all).
