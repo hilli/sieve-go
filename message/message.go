@@ -57,6 +57,7 @@ type mailMessage struct {
 	headers  []Header
 	body     []byte
 	envelope map[string][]string
+	parts    []MIMEPart
 }
 
 func (m *mailMessage) Header(name string) []string {
@@ -90,12 +91,17 @@ func (m *mailMessage) Envelope(field string) []string {
 	return m.envelope[strings.ToLower(field)]
 }
 
+// MIMEParts implements MIMEProvider; returns nil for messages built
+// through Builder unless parts have been attached.
+func (m *mailMessage) MIMEParts() []MIMEPart { return m.parts }
+
 // Builder is a convenience for constructing Messages in tests and small
 // host apps without going through net/mail.
 type Builder struct {
 	headers  []Header
 	body     []byte
 	envelope map[string][]string
+	parts    []MIMEPart
 }
 
 func NewBuilder() *Builder { return &Builder{envelope: map[string][]string{}} }
@@ -112,6 +118,26 @@ func (b *Builder) SetEnvelope(field string, values ...string) *Builder {
 	return b
 }
 
+// AddMIMEPart attaches a pre-built MIME part. Useful for tests that want
+// to exercise the "mime" extension without parsing a multipart blob.
+func (b *Builder) AddMIMEPart(p MIMEPart) *Builder {
+	b.parts = append(b.parts, p)
+	return b
+}
+
 func (b *Builder) Build() Message {
-	return &mailMessage{headers: b.headers, body: b.body, envelope: b.envelope}
+	return &mailMessage{headers: b.headers, body: b.body, envelope: b.envelope, parts: b.parts}
+}
+
+// NewMIMEPart builds a synthetic MIMEPart for tests and host code that
+// already has the headers/body parsed.
+func NewMIMEPart(headers []Header, body []byte) MIMEPart {
+	ct := ""
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, "Content-Type") {
+			ct = h.Value
+			break
+		}
+	}
+	return &mimePart{headers: headers, body: body, contentType: ct}
 }

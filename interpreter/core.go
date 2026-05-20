@@ -131,6 +131,15 @@ func testEnvelope(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (boo
 // it without duplicating logic.
 var TestEnvelope = testEnvelope
 
+// TestHeader, TestAddress, TestExists are exposed so the mime extension
+// (RFC 5703) can delegate to the core implementation when a script does
+// not use the :mime / :anychild tags.
+var (
+	TestHeader  = testHeader
+	TestAddress = testAddress
+	TestExists  = testExists
+)
+
 // testExists is true iff every named header is present at least once.
 func testExists(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, error) {
 	if len(args.Positional) != 1 {

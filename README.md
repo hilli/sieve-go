@@ -31,6 +31,7 @@ Bundled extensions:
 | `extensions/body`             | `body`       | RFC 5173 (`:raw` / `:text`)   |
 | `extensions/imap4flags`       | `imap4flags` | RFC 5232 subset               |
 | `extensions/regex`            | `regex`      | draft-ietf-sieve-regex        |
+| `extensions/mime`             | `mime`       | RFC 5703 (`:mime` / `:anychild`) |
 
 ## Install
 
@@ -98,7 +99,27 @@ touches the script.
 
 ```sh
 go run ./examples/simple
+go run ./examples/attachments
 echo 'keep;' | go run ./examples/validate
+```
+
+### Detecting attachments
+
+Load the `mime` extension and parse the raw message with
+`message.ParseMIME`, which surfaces MIME parts to `:mime :anychild`:
+
+```go
+import (
+    _ "sieve/extensions/fileinto"
+    _ "sieve/extensions/mime"
+)
+
+script, _ := sieve.Compile(`require ["mime","fileinto"];
+if header :mime :anychild :contains "Content-Disposition" "attachment" {
+    fileinto "Attachments";
+}`)
+msg, _ := message.ParseMIME(rawMessageBytes)
+script.Run(msg, handler)
 ```
 
 ## Extending the language
@@ -144,7 +165,8 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 │   ├── envelope/       RFC 5228 §5.4
 │   ├── body/           RFC 5173
 │   ├── imap4flags/     RFC 5232 (subset)
-│   └── regex/          draft-ietf-sieve-regex
+│   ├── regex/          draft-ietf-sieve-regex
+│   └── mime/           RFC 5703 (subset)
 ├── examples/
 │   ├── simple/         embed the library
 │   └── validate/       stdin → ok / error CLI
@@ -170,5 +192,6 @@ These are good first contributions if you want to dig in.
 * [RFC 5228](https://www.rfc-editor.org/rfc/rfc5228) — Sieve core
 * [RFC 5232](https://www.rfc-editor.org/rfc/rfc5232) — fileinto, imap4flags
 * [RFC 5173](https://www.rfc-editor.org/rfc/rfc5173) — body
+* [RFC 5703](https://www.rfc-editor.org/rfc/rfc5703) — MIME part tests
 * [IANA Sieve Extensions](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml)
 * [Writing An Interpreter In Go](https://interpreterbook.com) — overall design inspiration

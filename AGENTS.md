@@ -27,6 +27,7 @@ extensions/          one package per Sieve extension; each self-registers via in
   body/              RFC 5173
   imap4flags/        RFC 5232 subset
   regex/             draft-ietf-sieve-regex
+  mime/              RFC 5703 subset (:mime, :anychild)
 examples/
   simple/            embed the library
   validate/          stdin → ok / error CLI
