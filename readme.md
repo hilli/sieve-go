@@ -1,140 +1,174 @@
 # sieve-go
 
-A [Sieve mail filtering language](https://www.rfc-editor.org/rfc/rfc5228)
-implementation in Go, designed to be embedded in mail-handling
-applications. Parse, validate, and execute Sieve scripts; plug in your
-own action handlers; extend the language with new commands and tests.
+A pluggable [Sieve mail filtering language](https://www.rfc-editor.org/rfc/rfc5228)
+implementation in Go. Designed to be embedded in mail-handling
+applications: parse a script, plug in your handler, route mail.
+
+* **Compile / Validate / Run** — separate parsing and validation from
+  execution, so you can accept user-submitted scripts safely.
+* **Extensible** — actions, tests, and match-type tags live in a
+  registry. Each [IANA Sieve extension](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml)
+  can be a small standalone package.
+* **Mail-format agnostic** — your application supplies a `Message`
+  interface; a `net/mail` adapter is included.
+* **No external dependencies.**
 
 ## Status
 
-RFC 5228 core implemented:
+RFC 5228 core: lexer, parser, AST, registry, interpreter with `if` /
+`elsif` / `else`, `stop`, implicit keep, the standard actions
+(`keep`, `discard`, `redirect`), tests (`address`, `header`, `exists`,
+`size`), combinators (`allof`, `anyof`, `not`, `true`, `false`), match
+types (`:is`, `:contains`, `:matches` with `*` / `?` globs), and
+address parts (`:all`, `:localpart`, `:domain`).
 
-* lexer with quoted/multi-line strings, numbers with K/M/G quantifiers,
-  tagged arguments, hash + bracket comments
-* recursive-descent parser → AST
-* extension registry for commands, tests, and capabilities
-* interpreter with `if`/`elsif`/`else`, `stop`, implicit keep
-* core actions: `keep`, `discard`, `redirect`
-* core tests: `address`, `header`, `exists`, `size`, `envelope`
-* match types: `:is`, `:contains`, `:matches` (with `*` / `?` globs)
-* address parts: `:all`, `:localpart`, `:domain`
-* combinators: `allof`, `anyof`, `not`, `true`, `false`
-* `validate` separate from `run`
-* example extensions:
-  * `fileinto` (RFC 5232)
-  * `envelope` (RFC 5228 §5.4 capability)
-  * `body` (RFC 5173) — `:raw` / `:text`
-  * `imap4flags` (RFC 5232) — `setflag`/`addflag`/`removeflag`/`hasflag`
-  * `regex` (draft-ietf-sieve-regex) — `:regex` match type
+Bundled extensions:
+
+| Package                       | Capability   | Spec                          |
+| ----------------------------- | ------------ | ----------------------------- |
+| `extensions/fileinto`         | `fileinto`   | RFC 5232                      |
+| `extensions/envelope`         | `envelope`   | RFC 5228 §5.4                 |
+| `extensions/body`             | `body`       | RFC 5173 (`:raw` / `:text`)   |
+| `extensions/imap4flags`       | `imap4flags` | RFC 5232 subset               |
+| `extensions/regex`            | `regex`      | draft-ietf-sieve-regex        |
 
 ## Install
 
-```
+```sh
 go get sieve
 ```
 
-## Usage
+## Quick start
 
 ```go
+package main
+
 import (
+    "fmt"
+    "log"
+
     "sieve"
-    _ "sieve/extensions/fileinto" // self-registers fileinto
+    _ "sieve/extensions/fileinto" // enables `require ["fileinto"];`
     "sieve/message"
 )
 
-type Handler struct{}
-func (Handler) Keep() error                { /* deliver to INBOX */ return nil }
-func (Handler) Discard() error             { return nil }
-func (Handler) Redirect(addr string) error { /* forward */ return nil }
-func (Handler) FileInto(mb string) error   { /* deliver to mb */ return nil }
+type Handler struct{ delivered string }
 
-s, err := sieve.Compile(`
-    require ["fileinto"];
-    if header :contains "Subject" "[oncall]" {
-        fileinto "Oncall";
-        stop;
-    }
-`)
-if err != nil { panic(err) }
+func (h *Handler) Keep() error               { h.delivered = "INBOX"; return nil }
+func (h *Handler) FileInto(mb string) error  { h.delivered = mb; return nil }
+func (h *Handler) Discard() error            { h.delivered = "/dev/null"; return nil }
+func (h *Handler) Redirect(addr string) error { return nil }
 
-msg := message.NewBuilder().
-    AddHeader("From", "alice@example.com").
-    AddHeader("Subject", "[oncall] page").
-    Build()
+func main() {
+    script, err := sieve.Compile(`
+        require ["fileinto"];
+        if header :contains "Subject" "[oncall]" {
+            fileinto "Oncall";
+            stop;
+        }
+    `)
+    if err != nil { log.Fatal(err) }
 
-_ = s.Run(msg, Handler{})
-```
+    msg := message.NewBuilder().
+        AddHeader("From", "alice@example.com").
+        AddHeader("Subject", "[oncall] disk full").
+        Build()
 
-### Validate only
-
-```go
-if err := sieve.Validate(userSubmittedScript); err != nil {
-    return fmt.Errorf("invalid: %w", err)
+    h := &Handler{}
+    if err := script.Run(msg, h); err != nil { log.Fatal(err) }
+    fmt.Println("delivered to:", h.delivered) // -> Oncall
 }
 ```
 
-### Examples
+### Validate without running
 
+For UIs that accept user-submitted scripts:
+
+```go
+if err := sieve.Validate(userScript); err != nil {
+    return fmt.Errorf("invalid sieve script: %w", err)
+}
 ```
+
+Validation catches unknown commands, unknown tests, missing `require`,
+malformed argument shapes, and similar problems before any message ever
+touches the script.
+
+### Run the examples
+
+```sh
 go run ./examples/simple
 echo 'keep;' | go run ./examples/validate
 ```
 
-## Adding extensions
+## Extending the language
 
-Each Sieve extension lives in its own package under `extensions/`.
-A registration looks like:
+Each Sieve extension is a separate Go package that self-registers on
+import. To enable one in scripts processed by the package-level
+`sieve.Compile`, just blank-import it:
 
 ```go
-package myext
-
-import "sieve"
-
-const Capability = "myext"
-
-func Register(i *sieve.Interpreter) {
-    i.Registry().RegisterAction("myaction", action, Capability)
-    i.Registry().RegisterTest("mytest", test, Capability)
-}
-
-func init() { Register(sieve.Default()) }
+import (
+    _ "sieve/extensions/body"
+    _ "sieve/extensions/regex"
+)
 ```
 
-Scripts then opt in with `require ["myext"];`. Validation fails if the
-capability is missing from the registry, so importing the package is the
-gate.
+…and scripts use `require ["body", "regex"];`.
 
-See `extensions/fileinto/fileinto.go` for a complete worked example.
-There are 100+ extensions in the
-[IANA registry](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml);
-the registry-based design lets each be added as a self-contained package.
+For hosts that need an isolated registry (e.g. multiple tenants with
+different allowed extensions), build a fresh interpreter:
+
+```go
+i := sieve.NewInterpreter()
+fileinto.Register(i)        // explicit, no global side effects
+s, err := /* parse and compile through i */
+```
+
+To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 
 ## Package layout
 
 ```
 .
-├── sieve.go        top-level façade (Compile, Validate, NewInterpreter)
-├── ast/            AST node types
-├── token/          token type constants
-├── lexer/          lexer
-├── parser/         parser → ast.Script
-├── registry/       extensible action/test/capability registry
-├── interpreter/    AST walker + RFC 5228 builtins
-├── message/        Message interface + net/mail adapter + Builder
+├── sieve.go            top-level façade: Compile, Validate, NewInterpreter, Default
+├── ast/                AST node types
+├── token/              token types
+├── lexer/              source → tokens
+├── parser/             tokens → AST
+├── registry/           pluggable actions/tests/match-types/capabilities
+├── interpreter/        AST walker + RFC 5228 builtins
+├── message/            Message interface + net/mail adapter + Builder
 ├── extensions/
-│   ├── fileinto/   RFC 5232
-│   ├── envelope/   RFC 5228 §5.4
-│   ├── body/       RFC 5173
-│   ├── imap4flags/ RFC 5232 (subset)
-│   └── regex/      draft-ietf-sieve-regex
-└── examples/
-    ├── simple/     embed library, run script
-    └── validate/   validate-only CLI
+│   ├── fileinto/       RFC 5232
+│   ├── envelope/       RFC 5228 §5.4
+│   ├── body/           RFC 5173
+│   ├── imap4flags/     RFC 5232 (subset)
+│   └── regex/          draft-ietf-sieve-regex
+├── examples/
+│   ├── simple/         embed the library
+│   └── validate/       stdin → ok / error CLI
+├── docs/
+│   └── extensions.md   how to write an extension
+└── AGENTS.md           guidance for AI coding agents
 ```
+
+## Limitations
+
+* Sieve **variables** (RFC 5229) are not implemented; this in turn
+  limits the `:flags` argument on `fileinto`/`keep` and the two-argument
+  form of `hasflag`.
+* `body :content "type/subtype"` returns an error rather than doing a
+  best-effort MIME walk.
+* The default comparator is `i;ascii-casemap`; other comparators are
+  not yet selectable via `:comparator`.
+
+These are good first contributions if you want to dig in.
 
 ## References
 
 * [RFC 5228](https://www.rfc-editor.org/rfc/rfc5228) — Sieve core
-* [RFC 5232](https://www.rfc-editor.org/rfc/rfc5232) — fileinto
+* [RFC 5232](https://www.rfc-editor.org/rfc/rfc5232) — fileinto, imap4flags
+* [RFC 5173](https://www.rfc-editor.org/rfc/rfc5173) — body
 * [IANA Sieve Extensions](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml)
 * [Writing An Interpreter In Go](https://interpreterbook.com) — overall design inspiration
