@@ -49,9 +49,77 @@ type Test struct {
 
 // Arguments holds positional and tagged arguments in source order.
 // Positional values may be StringValue, NumberValue, or StringListValue.
+// Order preserves the interleaving of tags and positional arguments so
+// that value-bearing tags (e.g. :comparator "i;octet", :content "text",
+// :over 1K) can be paired with the positional that follows them.
 type Arguments struct {
 	Tags       []TaggedArg
 	Positional []Value
+	Order      []ArgRef
+}
+
+// ArgKind labels a slot in Arguments.Order.
+type ArgKind int
+
+const (
+	KindTag ArgKind = iota
+	KindPositional
+)
+
+// ArgRef is one entry in Arguments.Order pointing at either Tags[Idx] or
+// Positional[Idx].
+type ArgRef struct {
+	Kind ArgKind
+	Idx  int
+}
+
+// ValueAfterTag returns the positional value that immediately follows the
+// first tag named name (case-insensitive), or nil if either the tag is
+// absent or nothing follows it before the next tag / end of arguments.
+func (a *Arguments) ValueAfterTag(name string) Value {
+	for i, ref := range a.Order {
+		if ref.Kind != KindTag {
+			continue
+		}
+		if !eqFold(a.Tags[ref.Idx].Name, name) {
+			continue
+		}
+		if i+1 < len(a.Order) && a.Order[i+1].Kind == KindPositional {
+			return a.Positional[a.Order[i+1].Idx]
+		}
+		return nil
+	}
+	return nil
+}
+
+// HasTag reports whether a tag with the given name (case-insensitive) is
+// present in Tags.
+func (a *Arguments) HasTag(name string) bool {
+	for _, t := range a.Tags {
+		if eqFold(t.Name, name) {
+			return true
+		}
+	}
+	return false
+}
+
+func eqFold(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := 0; i < len(a); i++ {
+		ca, cb := a[i], b[i]
+		if ca >= 'A' && ca <= 'Z' {
+			ca += 'a' - 'A'
+		}
+		if cb >= 'A' && cb <= 'Z' {
+			cb += 'a' - 'A'
+		}
+		if ca != cb {
+			return false
+		}
+	}
+	return true
 }
 
 // TaggedArg is a :tag argument. RFC 5228 tags can either be bare flags

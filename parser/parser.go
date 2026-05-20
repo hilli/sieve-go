@@ -140,27 +140,35 @@ func (p *Parser) parseBlock() ([]*ast.Command, error) {
 // stop collecting arguments at the first IDENT/LPAREN (which is the test).
 func (p *Parser) parseArguments() (ast.Arguments, error) {
 	var args ast.Arguments
+	addTag := func(t ast.TaggedArg) {
+		args.Order = append(args.Order, ast.ArgRef{Kind: ast.KindTag, Idx: len(args.Tags)})
+		args.Tags = append(args.Tags, t)
+	}
+	addPos := func(v ast.Value) {
+		args.Order = append(args.Order, ast.ArgRef{Kind: ast.KindPositional, Idx: len(args.Positional)})
+		args.Positional = append(args.Positional, v)
+	}
 	for {
 		switch p.cur.Type {
 		case token.TAG:
-			args.Tags = append(args.Tags, ast.TaggedArg{Name: p.cur.Literal, Pos: ast.PosFrom(p.cur)})
+			addTag(ast.TaggedArg{Name: p.cur.Literal, Pos: ast.PosFrom(p.cur)})
 			p.advance()
 		case token.STRING:
-			args.Positional = append(args.Positional, ast.StringValue{Value: p.cur.Literal, Pos: ast.PosFrom(p.cur)})
+			addPos(ast.StringValue{Value: p.cur.Literal, Pos: ast.PosFrom(p.cur)})
 			p.advance()
 		case token.NUMBER:
 			n, err := strconv.ParseUint(p.cur.Literal, 10, 64)
 			if err != nil {
 				return args, p.errf(p.cur, "bad number %q: %v", p.cur.Literal, err)
 			}
-			args.Positional = append(args.Positional, ast.NumberValue{Value: n, Pos: ast.PosFrom(p.cur)})
+			addPos(ast.NumberValue{Value: n, Pos: ast.PosFrom(p.cur)})
 			p.advance()
 		case token.LBRACK:
 			sl, err := p.parseStringList()
 			if err != nil {
 				return args, err
 			}
-			args.Positional = append(args.Positional, sl)
+			addPos(sl)
 		default:
 			return args, nil
 		}

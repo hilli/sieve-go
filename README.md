@@ -26,12 +26,16 @@ Bundled extensions:
 
 | Package                       | Capability   | Spec                          |
 | ----------------------------- | ------------ | ----------------------------- |
-| `extensions/fileinto`         | `fileinto`   | RFC 5232                      |
+| `extensions/fileinto`         | `fileinto`   | RFC 5232 (incl. `:flags`)     |
 | `extensions/envelope`         | `envelope`   | RFC 5228 §5.4                 |
-| `extensions/body`             | `body`       | RFC 5173 (`:raw` / `:text`)   |
-| `extensions/imap4flags`       | `imap4flags` | RFC 5232 subset               |
+| `extensions/body`             | `body`       | RFC 5173 (`:raw`/`:text`/`:content`) |
+| `extensions/imap4flags`       | `imap4flags` | RFC 5232 (full)               |
+| `extensions/variables`        | `variables`  | RFC 5229                      |
 | `extensions/regex`            | `regex`      | draft-ietf-sieve-regex        |
 | `extensions/mime`             | `mime`       | RFC 5703 (`:mime` / `:anychild`) |
+
+The core also honours the standard `:comparator` tag with the
+`i;ascii-casemap` (default) and `i;octet` comparators from RFC 4790.
 
 ## Install
 
@@ -164,7 +168,8 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 │   ├── fileinto/       RFC 5232
 │   ├── envelope/       RFC 5228 §5.4
 │   ├── body/           RFC 5173
-│   ├── imap4flags/     RFC 5232 (subset)
+│   ├── imap4flags/     RFC 5232
+│   ├── variables/      RFC 5229
 │   ├── regex/          draft-ietf-sieve-regex
 │   └── mime/           RFC 5703 (subset)
 ├── examples/
@@ -180,17 +185,11 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 Known unimplemented pieces — each one fails loudly (validation error,
 runtime error, or simply doesn't fire) rather than silently mismatching:
 
-* **Variables (RFC 5229)** — not implemented. This in turn limits:
-  * the `:flags` tag on `fileinto` / `keep`;
-  * the two-argument form of `hasflag` (variable-list).
-* **`body :content "type/subtype"`** — returns a runtime error. Use
-  `:raw` or `:text` for now.
-* **`:comparator`** — only the default `i;ascii-casemap` is wired up;
-  passing another comparator is currently ignored.
-* **RFC 5703 (`mime`)** — only the `:mime` / `:anychild` tags ship.
-  `foreverypart`, `break`, `replace`, `enclose`, and `extracttext`
-  are not registered, so scripts using them fail validation as unknown
-  commands.
+* **RFC 5703 (`mime`) control flow** — only the `:mime` / `:anychild`
+  tags ship. `foreverypart`, `break`, `replace`, `enclose`, and
+  `extracttext` are not registered, so scripts using them fail
+  validation as unknown commands. (Adding them requires a new
+  `RegisterCommand` mechanism in the registry.)
 * **Other IANA extensions** — `include`, `reject`, `vacation`,
   `editheader`, `notify`, `relational`, `subaddress`, etc. are not
   built. The registry is the extension point — see
@@ -201,6 +200,7 @@ These are good first contributions if you want to dig in.
 ## References
 
 * [RFC 5228](https://www.rfc-editor.org/rfc/rfc5228) — Sieve core
+* [RFC 5229](https://www.rfc-editor.org/rfc/rfc5229) — variables
 * [RFC 5232](https://www.rfc-editor.org/rfc/rfc5232) — fileinto, imap4flags
 * [RFC 5173](https://www.rfc-editor.org/rfc/rfc5173) — body
 * [RFC 5703](https://www.rfc-editor.org/rfc/rfc5703) — MIME part tests

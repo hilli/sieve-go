@@ -244,7 +244,8 @@ func (i *Interpreter) execBlock(cmds []*ast.Command, st *state) error {
 			if !ok {
 				return fmt.Errorf("unknown action %q at %d:%d", c.Name, c.Pos.Line, c.Pos.Col)
 			}
-			if err := fn(st, &c.Args); err != nil {
+			a := expandArgs(&c.Args, st.vars)
+			if err := fn(st, a); err != nil {
 				return fmt.Errorf("%s: %w", c.Name, err)
 			}
 		}
@@ -262,12 +263,19 @@ type state struct {
 	reg      *registry.Registry
 	explicit bool
 	stopped  bool
+	vars     *registry.Variables
 }
 
-func (s *state) Message() message.Message { return s.msg }
-func (s *state) Handler() registry.Handler { return s.handler }
-func (s *state) MarkExplicitAction()       { s.explicit = true }
-func (s *state) Stop()                     { s.stopped = true }
+func (s *state) Message() message.Message    { return s.msg }
+func (s *state) Handler() registry.Handler   { return s.handler }
+func (s *state) MarkExplicitAction()         { s.explicit = true }
+func (s *state) Stop()                       { s.stopped = true }
+func (s *state) Variables() *registry.Variables {
+	if s.vars == nil {
+		s.vars = registry.NewVariables()
+	}
+	return s.vars
+}
 
 func (s *state) EvalTest(t *ast.Test) (bool, error) {
 	switch t.Name {
@@ -305,7 +313,8 @@ func (s *state) EvalTest(t *ast.Test) (bool, error) {
 	if !ok {
 		return false, fmt.Errorf("unknown test %q at %d:%d", t.Name, t.Pos.Line, t.Pos.Col)
 	}
-	return fn(s, &t.Args, t.Children)
+	a := expandArgs(&t.Args, s.vars)
+	return fn(s, a, t.Children)
 }
 
 // Helpers used by core test implementations.

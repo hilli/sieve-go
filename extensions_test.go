@@ -9,6 +9,7 @@ import (
 	_ "github.com/hilli/sieve-go/extensions/envelope"
 	_ "github.com/hilli/sieve-go/extensions/imap4flags"
 	_ "github.com/hilli/sieve-go/extensions/regex"
+	"github.com/hilli/sieve-go/message"
 )
 
 func TestEnvelopeExtension(t *testing.T) {
@@ -42,14 +43,23 @@ func TestBodyExtensionRaw(t *testing.T) {
 	}
 }
 
-func TestBodyContentNotImplemented(t *testing.T) {
-	src := `require ["body"]; if body :content "text/plain" "x" { keep; }`
+func TestBodyContentMatches(t *testing.T) {
+	const raw = "Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n" +
+		"--B\r\nContent-Type: text/plain\r\n\r\nhello plain\r\n" +
+		"--B\r\nContent-Type: text/html\r\n\r\n<p>hello html</p>\r\n" +
+		"--B--\r\n"
+	r := &recorder{}
+	src := `require ["body"]; if body :content "text/html" :contains "hello html" { discard; }`
 	s, err := sieve.Compile(src)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.Run(sampleMsg(), &recorder{}); err == nil {
-		t.Fatal("expected an error for body :content (not implemented)")
+	msg, _ := message.ParseMIME([]byte(raw))
+	if err := s.Run(msg, r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.actions) == 0 || r.actions[0] != "discard" {
+		t.Fatalf("actions: %v", r.actions)
 	}
 }
 

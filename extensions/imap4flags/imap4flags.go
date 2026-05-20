@@ -1,8 +1,9 @@
-// Package imap4flags implements a subset of the Sieve "imap4flags"
-// extension (RFC 5232): the actions `setflag`, `addflag`, `removeflag`
-// and the test `hasflag`. The `:flags` tag argument to fileinto/keep is
-// not yet supported — host applications wanting that should track the
-// pending flag set themselves via the Handler callbacks below.
+// Package imap4flags implements the Sieve "imap4flags" extension
+// (RFC 5232): the actions `setflag`, `addflag`, `removeflag` and the
+// test `hasflag`. The `:flags` tag argument to fileinto/keep is wired
+// in core (see interpreter.KeepWithFlagsHandler and
+// fileinto.FlagsHandler) and is honoured when the host implements the
+// corresponding interface.
 package imap4flags
 
 import (
@@ -11,6 +12,7 @@ import (
 
 	"github.com/hilli/sieve-go"
 	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/interpreter"
 	"github.com/hilli/sieve-go/registry"
 )
 
@@ -76,24 +78,43 @@ func actionRemove(ctx registry.Context, args *ast.Arguments) error {
 }
 
 func testHasflag(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, error) {
-	// RFC 5232 §3.2: hasflag with one arg uses the message flag list.
-	// With two args (variable-list, key-list) it tests the named variable;
-	// we don't yet support Sieve variables, so accept only the one-arg form.
-	if len(args.Positional) != 1 {
-		return false, fmt.Errorf("hasflag: only the one-argument form is supported (variables not implemented)")
+	// RFC 5232 §3.2: hasflag has two forms.
+	//   hasflag [MATCH-TYPE] [COMPARATOR] <list-of-keys: string-list>
+	//   hasflag [MATCH-TYPE] [COMPARATOR] <variable-list: string-list>
+	//                                     <list-of-keys: string-list>
+	// In the one-arg form the source is the message flag list; in the
+	// two-arg form the source is the union of the named Sieve variables.
+	if len(args.Positional) < 1 || len(args.Positional) > 2 {
+		return false, fmt.Errorf("hasflag: expected 1 or 2 arguments, got %d", len(args.Positional))
 	}
-	keys, ok := stringsOf(args.Positional[0])
+	var src []string
+	if len(args.Positional) == 1 {
+		h, ok := ctx.Handler().(Handler)
+		if !ok {
+			return false, fmt.Errorf("hasflag: handler does not implement imap4flags.Handler")
+		}
+		src = splitAll(h.CurrentFlags())
+	} else {
+		names, ok := stringsOf(args.Positional[0])
+		if !ok {
+			return false, fmt.Errorf("hasflag: variable list must be a string or string list")
+		}
+		vars := ctx.Variables()
+		for _, n := range names {
+			src = append(src, splitAll([]string{vars.Get(n)})...)
+		}
+	}
+	keysArg, ok := stringsOf(args.Positional[len(args.Positional)-1])
 	if !ok {
-		return false, fmt.Errorf("hasflag: argument must be a string or string list")
+		return false, fmt.Errorf("hasflag: key list must be a string or string list")
 	}
-	h, ok := ctx.Handler().(Handler)
-	if !ok {
-		return false, fmt.Errorf("hasflag: handler does not implement imap4flags.Handler")
-	}
-	cur := normalize(h.CurrentFlags())
-	for _, k := range splitAll(keys) {
-		if cur[strings.ToLower(k)] {
-			return true, nil
+	keys := splitAll(keysArg)
+	match := interpreter.LookupMatcher(ctx, args)
+	for _, s := range src {
+		for _, k := range keys {
+			if match(s, k) {
+				return true, nil
+			}
 		}
 	}
 	return false, nil
@@ -117,14 +138,6 @@ func splitAll(values []string) []string {
 	var out []string
 	for _, v := range values {
 		out = append(out, strings.Fields(v)...)
-	}
-	return out
-}
-
-func normalize(flags []string) map[string]bool {
-	out := make(map[string]bool, len(flags))
-	for _, f := range flags {
-		out[strings.ToLower(f)] = true
 	}
 	return out
 }

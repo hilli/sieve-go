@@ -76,19 +76,9 @@ func TestSpaceSeparatedFlags(t *testing.T) {
 
 func TestHasflagTrueAndFalse(t *testing.T) {
 	h := &fh{flags: []string{"\\Seen"}}
-	type rec struct {
-		fh
-		hit bool
-	}
-	r := &rec{fh: *h}
 	src := `require ["imap4flags"]; if hasflag "\\Seen" { discard; }`
-	if err := run(t, src, r); err != nil {
+	if err := run(t, src, h); err != nil {
 		t.Fatal(err)
-	}
-	if len(r.actions) == 0 {
-		// discard is a plain action, not recorded into fh.actions; we
-		// look at side effects: discard doesn't touch fh, so just rely
-		// on no error and exit.
 	}
 
 	// hasflag false → implicit keep.
@@ -113,7 +103,7 @@ func TestActionArgErrors(t *testing.T) {
 		`require ["imap4flags"]; setflag "a" "b";`,
 		`require ["imap4flags"]; if hasflag { keep; }`,
 		`require ["imap4flags"]; if hasflag 1 { keep; }`,
-		`require ["imap4flags"]; if hasflag "a" "b" { keep; }`,
+		`require ["imap4flags"]; if hasflag "a" "b" "c" { keep; }`,
 	} {
 		err := run(t, src, &fh{})
 		if err == nil {

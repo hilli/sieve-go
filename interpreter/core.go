@@ -29,14 +29,73 @@ func RegisterCore(r *registry.Registry) {
 	r.RegisterMatchType(":is", matchIs, "")
 	r.RegisterMatchType(":contains", matchContains, "")
 	r.RegisterMatchType(":matches", matchMatches, "")
+
+	// Comparators (RFC 5228 §2.7.3). i;ascii-casemap is the default;
+	// i;octet is the only other mandatory-to-implement comparator.
+	r.RegisterComparator("i;ascii-casemap", asciiCasemap{}, "")
+	r.RegisterComparator("i;octet", octet{}, "")
 }
 
 // ---------- actions ----------
 
+// KeepWithFlagsHandler is the optional sub-interface for hosts that want
+// to receive `keep :flags ["\\Seen", ...]` per RFC 5232 §3.3. When a
+// script uses :flags on keep, the host MUST implement this interface or
+// the action errors.
+type KeepWithFlagsHandler interface {
+	KeepWithFlags(flags []string) error
+}
+
 func actionKeep(ctx registry.Context, args *ast.Arguments) error {
 	ctx.MarkExplicitAction()
+	flags, _, err := extractKeepFlags(args, "keep")
+	if err != nil {
+		return err
+	}
+	if flags != nil {
+		h, ok := ctx.Handler().(KeepWithFlagsHandler)
+		if !ok {
+			return fmt.Errorf("keep :flags requires a handler implementing KeepWithFlagsHandler")
+		}
+		return h.KeepWithFlags(flags)
+	}
 	return ctx.Handler().Keep()
 }
+
+func extractKeepFlags(args *ast.Arguments, name string) ([]string, int, error) {
+	for i, ref := range args.Order {
+		if ref.Kind != registryArgKindTag {
+			continue
+		}
+		if !strings.EqualFold(args.Tags[ref.Idx].Name, ":flags") {
+			continue
+		}
+		if i+1 >= len(args.Order) || args.Order[i+1].Kind != registryArgKindPositional {
+			return nil, -1, fmt.Errorf("%s :flags requires a string or string list argument", name)
+		}
+		pIdx := args.Order[i+1].Idx
+		raw, ok := stringsOf(args.Positional[pIdx])
+		if !ok {
+			return nil, -1, fmt.Errorf("%s :flags argument must be a string or string list", name)
+		}
+		var flags []string
+		for _, v := range raw {
+			flags = append(flags, strings.Fields(v)...)
+		}
+		if flags == nil {
+			flags = []string{}
+		}
+		return flags, pIdx, nil
+	}
+	return nil, -1, nil
+}
+
+// Local aliases so we don't have to import ast in this dispatch helper
+// from every file that mentions it.
+const (
+	registryArgKindTag        = ast.KindTag
+	registryArgKindPositional = ast.KindPositional
+)
 
 func actionDiscard(ctx registry.Context, args *ast.Arguments) error {
 	ctx.MarkExplicitAction()
@@ -183,19 +242,46 @@ func testSize(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, e
 
 // LookupMatcher returns the matcher function selected by the first
 // match-type tag in args; defaults to :is when no match-type tag is
-// present. It looks up via the interpreter's registry so extension match
-// types (e.g. :regex) work transparently.
+// present. It honours the :comparator tag for the built-in match types
+// (:is/:contains/:matches) by binding the chosen Comparator, and pushes
+// :matches captures into ctx.Variables() so RFC 5229 ${1}..${9} work.
+// Extension match types (e.g. :regex) keep their registered semantics.
 func LookupMatcher(ctx registry.Context, args *ast.Arguments) registry.MatchTypeFunc {
 	reg := ctx.(*state).reg
+
+	compName := "i;ascii-casemap"
+	if v := args.ValueAfterTag(":comparator"); v != nil {
+		if sv, ok := v.(ast.StringValue); ok {
+			compName = sv.Value
+		}
+	}
+	comp, _, ok := reg.LookupComparator(compName)
+	if !ok {
+		comp = asciiCasemap{}
+	}
+	fold := compName == "" || compName == "i;ascii-casemap"
+
 	for _, tg := range args.Tags {
-		if fn, _, ok := reg.LookupMatchType(strings.ToLower(tg.Name)); ok {
+		name := strings.ToLower(tg.Name)
+		switch name {
+		case ":is":
+			return func(s, k string) bool { return comp.Equal(s, k) }
+		case ":contains":
+			return func(s, k string) bool { return comp.Contains(s, k) }
+		case ":matches":
+			return func(s, k string) bool {
+				caps, ok := matchAndCapture(s, k, fold)
+				if ok {
+					ctx.Variables().SetCaptures(caps)
+				}
+				return ok
+			}
+		}
+		if fn, _, ok := reg.LookupMatchType(name); ok {
 			return fn
 		}
 	}
-	if fn, _, ok := reg.LookupMatchType(":is"); ok {
-		return fn
-	}
-	return matchIs
+	return func(s, k string) bool { return comp.Equal(s, k) }
 }
 
 func twoStringLists(args *ast.Arguments, name string) ([]string, []string, error) {
@@ -232,45 +318,9 @@ func addressPartString(addr string, p addressPart) string {
 }
 
 // matchIs/matchContains/matchMatches implement the RFC 5228 builtin
-// match types using the default i;ascii-casemap comparator.
+// match types using the default i;ascii-casemap comparator. These are
+// retained for compatibility with extensions that registered them
+// directly; LookupMatcher builds comparator-aware closures dynamically.
 func matchIs(s, key string) bool       { return strings.EqualFold(s, key) }
 func matchContains(s, key string) bool { return strings.Contains(strings.ToLower(s), strings.ToLower(key)) }
-func matchMatches(s, key string) bool  { return wildcardMatch(strings.ToLower(s), strings.ToLower(key)) }
-
-// wildcardMatch implements the RFC 5228 :matches glob: '?' matches any
-// single character, '*' matches zero or more characters; '\' escapes.
-func wildcardMatch(s, pat string) bool {
-	// Iterative dynamic algorithm with backtracking.
-	si, pi := 0, 0
-	star, ss := -1, 0
-	for si < len(s) {
-		switch {
-		case pi < len(pat) && pat[pi] == '\\' && pi+1 < len(pat):
-			if s[si] == pat[pi+1] {
-				si++
-				pi += 2
-				continue
-			}
-		case pi < len(pat) && (pat[pi] == '?' || pat[pi] == s[si]):
-			si++
-			pi++
-			continue
-		case pi < len(pat) && pat[pi] == '*':
-			star = pi
-			ss = si
-			pi++
-			continue
-		}
-		if star != -1 {
-			pi = star + 1
-			ss++
-			si = ss
-			continue
-		}
-		return false
-	}
-	for pi < len(pat) && pat[pi] == '*' {
-		pi++
-	}
-	return pi == len(pat)
-}
+func matchMatches(s, key string) bool  { return wildcardMatch(s, key) }

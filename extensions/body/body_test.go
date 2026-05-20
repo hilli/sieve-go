@@ -1,9 +1,9 @@
 package body
 
 import (
-	"strings"
 	"testing"
 
+	"github.com/hilli/sieve-go"
 	"github.com/hilli/sieve-go/interpreter"
 	"github.com/hilli/sieve-go/message"
 	"github.com/hilli/sieve-go/parser"
@@ -78,10 +78,66 @@ func TestBodyNoMatch(t *testing.T) {
 	}
 }
 
-func TestBodyContentErrors(t *testing.T) {
-	_, err := run(t, `require ["body"]; if body :content "text/plain" "x" { keep; }`, "")
-	if err == nil || !strings.Contains(err.Error(), ":content") {
-		t.Fatalf("expected :content error, got %v", err)
+func TestBodyContentBarePrefix(t *testing.T) {
+	const raw = "Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n" +
+		"--B\r\nContent-Type: text/plain\r\n\r\nhello plain\r\n" +
+		"--B--\r\n"
+	msg, _ := message.ParseMIME([]byte(raw))
+	src := `require ["body"]; if body :content "text" :contains "hello" { discard; }`
+	s, err := sieve.Compile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &h{}
+	if err := s.Run(msg, r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.actions) == 0 || r.actions[0] != "discard" {
+		t.Fatalf("actions: %v", r.actions)
+	}
+}
+
+// TestBodyContentEmptyPrefix matches all parts.
+func TestBodyContentEmptyPrefix(t *testing.T) {
+	const raw = "Content-Type: multipart/mixed; boundary=\"B\"\r\n\r\n" +
+		"--B\r\nContent-Type: text/plain\r\n\r\nfindme\r\n" +
+		"--B--\r\n"
+	msg, _ := message.ParseMIME([]byte(raw))
+	src := `require ["body"]; if body :content "" :contains "findme" { discard; }`
+	s, err := sieve.Compile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &h{}
+	if err := s.Run(msg, r); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.actions) == 0 || r.actions[0] != "discard" {
+		t.Fatalf("actions: %v", r.actions)
+	}
+}
+
+// TestBodyContentNoMIMEProvider — Builder-built messages return no parts.
+func TestBodyContentNoMIMEProvider(t *testing.T) {
+	r, err := run(t, `require ["body"]; if body :content "text" :contains "x" { discard; }`, "x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r.actions[0] != "keep" {
+		t.Fatalf("actions: %v", r.actions)
+	}
+}
+
+func TestBodyContentArgError(t *testing.T) {
+	const raw = "Content-Type: text/plain\r\n\r\nhi\r\n"
+	msg, _ := message.ParseMIME([]byte(raw))
+	src := `require ["body"]; if body :content :contains "x" { keep; }` // :content has no string after it
+	s, err := sieve.Compile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Run(msg, &h{}); err == nil {
+		t.Fatal("expected error for :content without value")
 	}
 }
 

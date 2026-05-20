@@ -42,6 +42,71 @@ type Context interface {
 	// Stop signals "stop;" — the interpreter halts after the current
 	// command returns.
 	Stop()
+	// Variables exposes the script-level variable store (RFC 5229).
+	// Returns nil if the variables extension has not been registered.
+	Variables() *Variables
+}
+
+// Variables holds the named/numbered values used by Sieve string
+// interpolation (RFC 5229). Names are case-insensitive. Numbered
+// variables (set by :matches captures) are exposed under "0".."9".
+type Variables struct {
+	named    map[string]string
+	captured []string // last :matches captures; [0] is the whole match
+}
+
+func NewVariables() *Variables {
+	return &Variables{named: map[string]string{}}
+}
+
+// Get returns the value for name (case-insensitive). Numeric names map
+// to :matches captures. Returns "" if not set.
+func (v *Variables) Get(name string) string {
+	if v == nil {
+		return ""
+	}
+	if len(name) > 0 && name[0] >= '0' && name[0] <= '9' {
+		// numeric
+		idx := 0
+		for _, c := range name {
+			if c < '0' || c > '9' {
+				return ""
+			}
+			idx = idx*10 + int(c-'0')
+		}
+		if idx < len(v.captured) {
+			return v.captured[idx]
+		}
+		return ""
+	}
+	return v.named[lower(name)]
+}
+
+// Set assigns a named variable.
+func (v *Variables) Set(name, value string) {
+	if v == nil {
+		return
+	}
+	v.named[lower(name)] = value
+}
+
+// SetCaptures replaces the numeric capture set (called after a :matches
+// comparison; captures[0] is the whole match).
+func (v *Variables) SetCaptures(caps []string) {
+	if v == nil {
+		return
+	}
+	v.captured = caps
+}
+
+func lower(s string) string {
+	b := []byte(s)
+	for i, c := range b {
+		if c >= 'A' && c <= 'Z' {
+			b[i] = c + ('a' - 'A')
+		}
+	}
+	return string(b)
 }
 
 // Handler is what the host application implements to receive Sieve
@@ -56,10 +121,11 @@ type Handler interface {
 
 // Registry holds registered actions, tests, and capabilities.
 type Registry struct {
-	mu         sync.RWMutex
-	actions    map[string]actionEntry
-	tests      map[string]testEntry
-	matchTypes map[string]matchTypeEntry
+	mu          sync.RWMutex
+	actions     map[string]actionEntry
+	tests       map[string]testEntry
+	matchTypes  map[string]matchTypeEntry
+	comparators map[string]comparatorEntry
 	// caps is the set of capabilities considered "available" by this
 	// registry. Core capabilities (none for RFC 5228 base) plus anything
 	// registered with a non-empty Requires.
@@ -87,12 +153,26 @@ type matchTypeEntry struct {
 	requires string
 }
 
+// Comparator implements the RFC 5228 §2.7.3 collation hooks consumed by
+// the :is / :contains / :matches built-in match types.
+type Comparator interface {
+	Equal(a, b string) bool
+	Contains(s, key string) bool
+	Matches(s, pattern string) bool
+}
+
+type comparatorEntry struct {
+	cmp      Comparator
+	requires string
+}
+
 func New() *Registry {
 	return &Registry{
-		actions:    map[string]actionEntry{},
-		tests:      map[string]testEntry{},
-		matchTypes: map[string]matchTypeEntry{},
-		caps:       map[string]bool{},
+		actions:     map[string]actionEntry{},
+		tests:       map[string]testEntry{},
+		matchTypes:  map[string]matchTypeEntry{},
+		comparators: map[string]comparatorEntry{},
+		caps:        map[string]bool{},
 	}
 }
 
@@ -167,6 +247,29 @@ func (r *Registry) LookupMatchType(name string) (MatchTypeFunc, string, bool) {
 		return nil, "", false
 	}
 	return e.fn, e.requires, true
+}
+
+// RegisterComparator adds a comparator (RFC 5228 §2.7.3) under its IANA
+// name (e.g. "i;ascii-casemap"). If requires is non-empty, scripts must
+// `require "comparator-<name>";` to use it (the Sieve convention).
+func (r *Registry) RegisterComparator(name string, c Comparator, requires string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.comparators[name] = comparatorEntry{cmp: c, requires: requires}
+	if requires != "" {
+		r.caps[requires] = true
+	}
+}
+
+// LookupComparator returns the comparator and its required capability.
+func (r *Registry) LookupComparator(name string) (Comparator, string, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	e, ok := r.comparators[name]
+	if !ok {
+		return nil, "", false
+	}
+	return e.cmp, e.requires, true
 }
 
 // ErrUnknown is returned by validation when a command or test is not in
