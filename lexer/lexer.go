@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"strings"
 
-	"sieve/token"
+	"github.com/hilli/sieve-go/token"
 )
 
 type Lexer struct {

@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"sieve/interpreter"
-	"sieve/message"
-	"sieve/parser"
+	"github.com/hilli/sieve-go/interpreter"
+	"github.com/hilli/sieve-go/message"
+	"github.com/hilli/sieve-go/parser"
 )
 
 type h struct{ actions []string }

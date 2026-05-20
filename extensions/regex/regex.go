@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"sync"
 
-	"sieve"
+	"github.com/hilli/sieve-go"
 )
 
 const Capability = "regex"

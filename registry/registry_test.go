@@ -3,7 +3,7 @@ package registry
 import (
 	"testing"
 
-	"sieve/ast"
+	"github.com/hilli/sieve-go/ast"
 )
 
 func TestRegisterAndLookupAction(t *testing.T) {

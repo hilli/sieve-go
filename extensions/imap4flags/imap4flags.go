@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"strings"
 
-	"sieve"
-	"sieve/ast"
-	"sieve/registry"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/registry"
 )
 
 const Capability = "imap4flags"

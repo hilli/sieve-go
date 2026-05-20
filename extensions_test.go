@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"sieve"
-	_ "sieve/extensions/body"
-	_ "sieve/extensions/envelope"
-	_ "sieve/extensions/imap4flags"
-	_ "sieve/extensions/regex"
+	"github.com/hilli/sieve-go"
+	_ "github.com/hilli/sieve-go/extensions/body"
+	_ "github.com/hilli/sieve-go/extensions/envelope"
+	_ "github.com/hilli/sieve-go/extensions/imap4flags"
+	_ "github.com/hilli/sieve-go/extensions/regex"
 )
 
 func TestEnvelopeExtension(t *testing.T) {

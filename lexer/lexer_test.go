@@ -3,7 +3,7 @@ package lexer
 import (
 	"testing"
 
-	"sieve/token"
+	"github.com/hilli/sieve-go/token"
 )
 
 func TestNextToken_Basic(t *testing.T) {

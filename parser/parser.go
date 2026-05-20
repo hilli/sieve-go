@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"strconv"
 
-	"sieve/ast"
-	"sieve/lexer"
-	"sieve/token"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/lexer"
+	"github.com/hilli/sieve-go/token"
 )
 
 // Error is a parse error with a position.

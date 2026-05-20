@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"sieve"
-	"sieve/interpreter"
-	"sieve/message"
-	"sieve/parser"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/interpreter"
+	"github.com/hilli/sieve-go/message"
+	"github.com/hilli/sieve-go/parser"
 )
 
 type plain struct{}

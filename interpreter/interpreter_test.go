@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"sieve/ast"
-	"sieve/message"
-	"sieve/parser"
-	"sieve/registry"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/message"
+	"github.com/hilli/sieve-go/parser"
+	"github.com/hilli/sieve-go/registry"
 )
 
 // recHandler captures action calls.

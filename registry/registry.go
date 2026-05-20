@@ -13,8 +13,8 @@ import (
 	"fmt"
 	"sync"
 
-	"sieve/ast"
-	"sieve/message"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/message"
 )
 
 // ActionFunc executes a registered action against the host.

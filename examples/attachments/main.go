@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log"
 
-	"sieve"
-	"sieve/message"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/message"
 
-	_ "sieve/extensions/fileinto"
-	_ "sieve/extensions/mime"
+	_ "github.com/hilli/sieve-go/extensions/fileinto"
+	_ "github.com/hilli/sieve-go/extensions/mime"
 )
 
 const script = `require ["mime","fileinto"];

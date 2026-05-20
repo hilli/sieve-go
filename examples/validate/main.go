@@ -9,8 +9,8 @@ import (
 	"io"
 	"os"
 
-	"sieve"
-	_ "sieve/extensions/fileinto"
+	"github.com/hilli/sieve-go"
+	_ "github.com/hilli/sieve-go/extensions/fileinto"
 )
 
 func main() {

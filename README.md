@@ -48,9 +48,9 @@ import (
     "fmt"
     "log"
 
-    "sieve"
-    _ "sieve/extensions/fileinto" // enables `require ["fileinto"];`
-    "sieve/message"
+    "github.com/hilli/sieve-go"
+    _ "github.com/hilli/sieve-go/extensions/fileinto" // enables `require ["fileinto"];`
+    "github.com/hilli/sieve-go/message"
 )
 
 type Handler struct{ delivered string }
@@ -110,8 +110,8 @@ Load the `mime` extension and parse the raw message with
 
 ```go
 import (
-    _ "sieve/extensions/fileinto"
-    _ "sieve/extensions/mime"
+    _ "github.com/hilli/sieve-go/extensions/fileinto"
+    _ "github.com/hilli/sieve-go/extensions/mime"
 )
 
 script, _ := sieve.Compile(`require ["mime","fileinto"];
@@ -130,8 +130,8 @@ import. To enable one in scripts processed by the package-level
 
 ```go
 import (
-    _ "sieve/extensions/body"
-    _ "sieve/extensions/regex"
+    _ "github.com/hilli/sieve-go/extensions/body"
+    _ "github.com/hilli/sieve-go/extensions/regex"
 )
 ```
 
@@ -177,13 +177,24 @@ To **write** a new extension, see [`docs/extensions.md`](docs/extensions.md).
 
 ## Limitations
 
-* Sieve **variables** (RFC 5229) are not implemented; this in turn
-  limits the `:flags` argument on `fileinto`/`keep` and the two-argument
-  form of `hasflag`.
-* `body :content "type/subtype"` returns an error rather than doing a
-  best-effort MIME walk.
-* The default comparator is `i;ascii-casemap`; other comparators are
-  not yet selectable via `:comparator`.
+Known unimplemented pieces — each one fails loudly (validation error,
+runtime error, or simply doesn't fire) rather than silently mismatching:
+
+* **Variables (RFC 5229)** — not implemented. This in turn limits:
+  * the `:flags` tag on `fileinto` / `keep`;
+  * the two-argument form of `hasflag` (variable-list).
+* **`body :content "type/subtype"`** — returns a runtime error. Use
+  `:raw` or `:text` for now.
+* **`:comparator`** — only the default `i;ascii-casemap` is wired up;
+  passing another comparator is currently ignored.
+* **RFC 5703 (`mime`)** — only the `:mime` / `:anychild` tags ship.
+  `foreverypart`, `break`, `replace`, `enclose`, and `extracttext`
+  are not registered, so scripts using them fail validation as unknown
+  commands.
+* **Other IANA extensions** — `include`, `reject`, `vacation`,
+  `editheader`, `notify`, `relational`, `subaddress`, etc. are not
+  built. The registry is the extension point — see
+  `docs/extensions.md`.
 
 These are good first contributions if you want to dig in.
 

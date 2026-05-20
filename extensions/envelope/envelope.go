@@ -5,8 +5,8 @@
 package envelope
 
 import (
-	"sieve"
-	"sieve/interpreter"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/interpreter"
 )
 
 const Capability = "envelope"

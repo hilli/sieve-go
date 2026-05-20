@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"sieve/ast"
+	"github.com/hilli/sieve-go/ast"
 )
 
 func TestParse_Simple(t *testing.T) {

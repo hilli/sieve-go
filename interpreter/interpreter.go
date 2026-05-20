@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"strings"
 
-	"sieve/ast"
-	"sieve/message"
-	"sieve/registry"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/message"
+	"github.com/hilli/sieve-go/registry"
 )
 // Interpreter holds a registry and can compile/run scripts against it.
 // One Interpreter is safe for concurrent use by multiple goroutines as

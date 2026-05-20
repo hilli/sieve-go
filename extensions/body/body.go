@@ -19,10 +19,10 @@ import (
 	"io"
 	"strings"
 
-	"sieve"
-	"sieve/ast"
-	"sieve/interpreter"
-	"sieve/registry"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/interpreter"
+	"github.com/hilli/sieve-go/registry"
 )
 
 const Capability = "body"

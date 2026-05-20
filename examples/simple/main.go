@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"log"
 
-	"sieve"
-	_ "sieve/extensions/fileinto" // self-registers fileinto
-	"sieve/message"
+	"github.com/hilli/sieve-go"
+	_ "github.com/hilli/sieve-go/extensions/fileinto" // self-registers fileinto
+	"github.com/hilli/sieve-go/message"
 )
 
 const script = `

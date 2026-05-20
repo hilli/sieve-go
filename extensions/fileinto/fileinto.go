@@ -9,9 +9,9 @@ package fileinto
 import (
 	"fmt"
 
-	"sieve"
-	"sieve/ast"
-	"sieve/registry"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/registry"
 )
 
 // Capability is the string scripts must `require` to use fileinto.

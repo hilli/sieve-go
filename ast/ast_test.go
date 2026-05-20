@@ -3,7 +3,7 @@ package ast
 import (
 	"testing"
 
-	"sieve/token"
+	"github.com/hilli/sieve-go/token"
 )
 
 func TestPosFrom(t *testing.T) {

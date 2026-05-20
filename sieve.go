@@ -11,10 +11,10 @@
 package sieve
 
 import (
-	"sieve/interpreter"
-	"sieve/message"
-	"sieve/parser"
-	"sieve/registry"
+	"github.com/hilli/sieve-go/interpreter"
+	"github.com/hilli/sieve-go/message"
+	"github.com/hilli/sieve-go/parser"
+	"github.com/hilli/sieve-go/registry"
 )
 
 // Handler is the host application's action receiver. Extensions that

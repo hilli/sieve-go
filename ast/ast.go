@@ -11,7 +11,7 @@
 // happens later, against the registry.
 package ast
 
-import "sieve/token"
+import "github.com/hilli/sieve-go/token"
 
 // Position is a 1-based line/column in the source.
 type Position struct {

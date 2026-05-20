@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"sieve"
-	"sieve/message"
+	"github.com/hilli/sieve-go"
+	"github.com/hilli/sieve-go/message"
 
-	_ "sieve/extensions/fileinto"
-	mimeext "sieve/extensions/mime"
+	_ "github.com/hilli/sieve-go/extensions/fileinto"
+	mimeext "github.com/hilli/sieve-go/extensions/mime"
 )
 
 // dummyHandler captures the actions taken by a script run.

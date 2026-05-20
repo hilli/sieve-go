@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"sieve"
-	_ "sieve/extensions/fileinto"
-	fileintoext "sieve/extensions/fileinto"
-	"sieve/message"
+	"github.com/hilli/sieve-go"
+	_ "github.com/hilli/sieve-go/extensions/fileinto"
+	fileintoext "github.com/hilli/sieve-go/extensions/fileinto"
+	"github.com/hilli/sieve-go/message"
 )
 
 type recorder struct {

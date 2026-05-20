@@ -5,8 +5,8 @@ import (
 	"net/mail"
 	"strings"
 
-	"sieve/ast"
-	"sieve/registry"
+	"github.com/hilli/sieve-go/ast"
+	"github.com/hilli/sieve-go/registry"
 )
 
 // RegisterCore registers the RFC 5228 built-in actions, tests, and match
