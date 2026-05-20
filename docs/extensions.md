@@ -150,14 +150,28 @@ If your action ever needs to terminate script execution, call
 
 ## Testing
 
-Add an integration test to `extensions_test.go` that compiles and runs
-a small script exercising your extension. Cover at least:
+Every extension package must ship with a `_test.go` file that exercises:
 
-* Success path (extension does what it should).
-* Validation failure when `require` is missing.
-* Argument errors (wrong type, wrong count).
+* The capability constant.
+* Every registered action and test (success path).
+* Every error path (wrong arg count, wrong arg type, missing handler
+  interface, runtime failures).
+* Match-type extensions: pattern matches, pattern misses, invalid
+  inputs.
 
-Then run `go vet ./... && go test ./...`.
+Run from the repo root:
+
+```sh
+go test ./...
+go test -cover ./...
+```
+
+Target ≥ 80 % statement coverage per package. The bundled extensions
+all sit at 93–100 %; use them as reference points.
+
+Add a small integration-style test to `extensions_test.go` at the
+repository root so the extension is also exercised through the
+top-level `sieve.Compile` / `Run` path.
 
 ## Wiring it in
 

@@ -34,17 +34,17 @@ func Register(i *sieve.Interpreter) {
 func init() { Register(sieve.Default()) }
 
 func test(ctx registry.Context, args *ast.Arguments, _ []*ast.Test) (bool, error) {
+	for _, tg := range args.Tags {
+		if strings.EqualFold(tg.Name, ":content") {
+			return false, fmt.Errorf("body :content is not implemented")
+		}
+	}
 	if len(args.Positional) != 1 {
 		return false, fmt.Errorf("body: expected 1 string-list argument, got %d", len(args.Positional))
 	}
 	keys, ok := stringsOf(args.Positional[0])
 	if !ok {
 		return false, fmt.Errorf("body: argument must be a string or string list")
-	}
-	for _, tg := range args.Tags {
-		if strings.EqualFold(tg.Name, ":content") {
-			return false, fmt.Errorf("body :content is not implemented")
-		}
 	}
 	bodyBytes, err := io.ReadAll(ctx.Message().Body())
 	if err != nil {

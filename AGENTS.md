@@ -92,6 +92,14 @@ script. `Message` is an interface, not a struct — keep it that way.
   state for the higher-level intent.
 * Run `go vet ./... && go test ./...` after every meaningful change.
   Commits without a passing build are not acceptable.
+* **Every new exported function, action, test, match-type, or
+  extension must ship with a test in the same package.** A package
+  without a `_test.go` file is a bug. The only intentionally untested
+  code is the `examples/` directory.
+* Aim for ≥ 80 % statement coverage per package; the current baseline
+  is in `docs/coverage.md` (regenerate with `go test -cover ./...`).
+  Coverage drops are reviewed; if you cannot exercise a branch, add a
+  comment explaining why.
 * Commit messages use a single short subject line and a body that
   describes *why* and *what*, grouped by bullet points. Always include
   the `Co-authored-by: Copilot` trailer (see workspace instructions).
