@@ -36,7 +36,7 @@ Bundled extensions:
 ## Install
 
 ```sh
-go get sieve
+go get github.com/hilli/sieve-go
 ```
 
 ## Quick start
