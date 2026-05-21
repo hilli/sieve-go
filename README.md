@@ -222,3 +222,7 @@ These are good first contributions if you want to dig in.
 * [RFC 5231](https://www.rfc-editor.org/rfc/rfc5231) — relational
 * [IANA Sieve Extensions](https://www.iana.org/assignments/sieve-extensions/sieve-extensions.xhtml)
 * [Writing An Interpreter In Go](https://interpreterbook.com) — overall design inspiration
+
+## License
+
+MIT
