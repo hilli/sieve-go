@@ -18,8 +18,8 @@ type dummyHandler struct {
 	redirect string
 }
 
-func (h *dummyHandler) Keep() error            { h.kept = true; return nil }
-func (h *dummyHandler) Discard() error         { return nil }
+func (h *dummyHandler) Keep() error             { h.kept = true; return nil }
+func (h *dummyHandler) Discard() error          { return nil }
 func (h *dummyHandler) Redirect(a string) error { h.redirect = a; return nil }
 func (h *dummyHandler) FileInto(f string) error { h.folder = f; return nil }
 
@@ -156,6 +156,35 @@ func TestRequireMissing(t *testing.T) {
 	src := `if header :mime :anychild :contains "Content-Disposition" "attachment" { discard; }`
 	if err := sieve.Validate(src); err == nil {
 		t.Errorf("expected validation error without require mime")
+	}
+}
+
+// TestBaseHeaderNoMIMECapability guards against a regression where loading the
+// mime extension made every plain `header`/`address`/`exists` test require the
+// "mime" capability. Per RFC 5703 only the :mime / :anychild tags do.
+func TestBaseHeaderNoMIMECapability(t *testing.T) {
+	for _, src := range []string{
+		`require ["fileinto"]; if header :contains "Subject" "x" { fileinto "X"; }`,
+		`require ["fileinto"]; if address :is "From" "a@b" { fileinto "X"; }`,
+		`require ["fileinto"]; if exists "Subject" { fileinto "X"; }`,
+	} {
+		if err := sieve.Validate(src); err != nil {
+			t.Errorf("plain test should validate without `require \"mime\"`: %v\nscript: %s", err, src)
+		}
+	}
+}
+
+// TestMIMETagRequiresCapability confirms the :mime tag still demands the
+// capability be required, on each extended test.
+func TestMIMETagRequiresCapability(t *testing.T) {
+	for _, src := range []string{
+		`require ["fileinto"]; if header :mime :contains "Subject" "x" { fileinto "X"; }`,
+		`require ["fileinto"]; if exists :mime "Subject" { fileinto "X"; }`,
+	} {
+		err := sieve.Validate(src)
+		if err == nil || !strings.Contains(err.Error(), "mime") {
+			t.Errorf("expected a mime-capability error, got %v\nscript: %s", err, src)
+		}
 	}
 }
 
