@@ -193,14 +193,9 @@ func TestMIMEHeaderArgErrors(t *testing.T) {
 if header :mime :anychild "Content-Disposition" {
     fileinto "X";
 }`
-	s, err := sieve.Compile(src)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-	msg, _ := message.ParseMIME([]byte(withAttachment))
-	err = s.Run(msg, &dummyHandler{})
+	_, err := sieve.Compile(src)
 	if err == nil || !strings.Contains(err.Error(), "expected 2 positional") {
-		t.Errorf("want arity error, got %v", err)
+		t.Errorf("want arity error at compile, got %v", err)
 	}
 }
 
@@ -209,14 +204,9 @@ func TestMIMEExistsArgErrors(t *testing.T) {
 if exists :mime :anychild "A" "B" {
     fileinto "X";
 }`
-	s, err := sieve.Compile(src)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-	msg, _ := message.ParseMIME([]byte(withAttachment))
-	err = s.Run(msg, &dummyHandler{})
+	_, err := sieve.Compile(src)
 	if err == nil || !strings.Contains(err.Error(), "expected 1 argument") {
-		t.Errorf("want arity error, got %v", err)
+		t.Errorf("want arity error at compile, got %v", err)
 	}
 }
 
@@ -225,14 +215,9 @@ func TestMIMEAddressArgErrors(t *testing.T) {
 if address :mime :anychild "From" {
     fileinto "X";
 }`
-	s, err := sieve.Compile(src)
-	if err != nil {
-		t.Fatalf("compile: %v", err)
-	}
-	msg, _ := message.ParseMIME([]byte(withAttachment))
-	err = s.Run(msg, &dummyHandler{})
+	_, err := sieve.Compile(src)
 	if err == nil || !strings.Contains(err.Error(), "expected 2 positional") {
-		t.Errorf("want arity error, got %v", err)
+		t.Errorf("want arity error at compile, got %v", err)
 	}
 }
 

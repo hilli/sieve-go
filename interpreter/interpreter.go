@@ -194,6 +194,14 @@ func (i *Interpreter) validateTest(t *ast.Test, caps map[string]bool) error {
 				}
 			}
 		}
+		// Compile-time argument validation (e.g. a `header` test needs a
+		// header-list and a key-list). Registered separately from the test
+		// handler so it survives an extension overriding the handler.
+		if v, ok := i.reg.LookupTestValidator(t.Name); ok {
+			if err := v(&t.Args); err != nil {
+				return fmt.Errorf("test %q at %d:%d: %v", t.Name, t.Pos.Line, t.Pos.Col, err)
+			}
+		}
 		return nil
 	}
 }

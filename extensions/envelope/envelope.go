@@ -13,6 +13,7 @@ const Capability = "envelope"
 
 func Register(i *sieve.Interpreter) {
 	i.Registry().RegisterTest("envelope", interpreter.TestEnvelope, Capability)
+	i.Registry().RegisterTestValidator("envelope", interpreter.ValidateTwoStringLists("envelope"))
 }
 
 func init() { Register(sieve.Default()) }

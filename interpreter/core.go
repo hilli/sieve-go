@@ -24,6 +24,14 @@ func RegisterCore(r *registry.Registry) {
 	r.RegisterTest("exists", testExists, "")
 	r.RegisterTest("size", testSize, "")
 
+	// Compile-time argument validators so malformed tests (e.g. `header`
+	// with no arguments) are rejected at validation time, not only when a
+	// message is eventually run through them.
+	r.RegisterTestValidator("address", ValidateTwoStringLists("address"))
+	r.RegisterTestValidator("header", ValidateTwoStringLists("header"))
+	r.RegisterTestValidator("exists", validateExists)
+	r.RegisterTestValidator("size", validateSize)
+
 	// Match types. Default per RFC 5228 §2.7.1 is :is; the lookup helper
 	// falls back to :is if no match-type tag is present.
 	r.RegisterMatchType(":is", matchIs, "")
@@ -306,6 +314,46 @@ func twoStringLists(args *ast.Arguments, name string) ([]string, []string, error
 	return a, b, nil
 }
 
+// ValidateTwoStringLists returns a compile-time validator for tests that
+// take a header/address-list and a key-list (header, address, envelope).
+// It mirrors twoStringLists but works on parsed arguments alone.
+func ValidateTwoStringLists(name string) registry.TestValidator {
+	return func(args *ast.Arguments) error {
+		_, _, err := twoStringLists(args, name)
+		return err
+	}
+}
+
+// validateExists is the compile-time validator for the `exists` test: it
+// takes exactly one string-or-string-list argument.
+func validateExists(args *ast.Arguments) error {
+	if len(args.Positional) != 1 {
+		return fmt.Errorf("expected 1 argument")
+	}
+	if _, ok := stringsOf(args.Positional[0]); !ok {
+		return fmt.Errorf("expected string or string list")
+	}
+	return nil
+}
+
+// validateSize is the compile-time validator for the `size` test: a single
+// number argument plus a :over or :under tag.
+func validateSize(args *ast.Arguments) error {
+	if len(args.Positional) != 1 {
+		return fmt.Errorf("expected 1 number argument")
+	}
+	if _, ok := args.Positional[0].(ast.NumberValue); !ok {
+		return fmt.Errorf("expected number")
+	}
+	for _, tg := range args.Tags {
+		switch strings.ToLower(tg.Name) {
+		case ":over", ":under":
+			return nil
+		}
+	}
+	return fmt.Errorf("requires :over or :under")
+}
+
 func addressPartString(addr string, p addressPart) string {
 	at := strings.LastIndexByte(addr, '@')
 	switch p {
@@ -328,6 +376,8 @@ func addressPartString(addr string, p addressPart) string {
 // match types using the default i;ascii-casemap comparator. These are
 // retained for compatibility with extensions that registered them
 // directly; LookupMatcher builds comparator-aware closures dynamically.
-func matchIs(s, key string) bool       { return strings.EqualFold(s, key) }
-func matchContains(s, key string) bool { return strings.Contains(strings.ToLower(s), strings.ToLower(key)) }
-func matchMatches(s, key string) bool  { return wildcardMatch(s, key) }
+func matchIs(s, key string) bool { return strings.EqualFold(s, key) }
+func matchContains(s, key string) bool {
+	return strings.Contains(strings.ToLower(s), strings.ToLower(key))
+}
+func matchMatches(s, key string) bool { return wildcardMatch(s, key) }

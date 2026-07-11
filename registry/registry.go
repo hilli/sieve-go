@@ -134,6 +134,13 @@ type Registry struct {
 	// extend existing tests/commands without being match-types, address
 	// parts or comparators (RFC 5703 ":mime"/":anychild", for example).
 	tags map[string]string
+	// testValidators holds optional compile-time argument validators keyed
+	// by test name. They let validation reject malformed usage (e.g. a
+	// `header` test with no arguments) before any message is available,
+	// instead of only failing at run time. Kept separate from testEntry so
+	// an extension that overrides a test's handler (e.g. the mime extension
+	// re-registering "header") does not accidentally drop the validator.
+	testValidators map[string]TestValidator
 	// caps is the set of capabilities considered "available" by this
 	// registry. Core capabilities (none for RFC 5228 base) plus anything
 	// registered with a non-empty Requires.
@@ -149,6 +156,12 @@ type testEntry struct {
 	fn       TestFunc
 	requires string
 }
+
+// TestValidator checks a test's arguments at compile time, before any
+// message is available. It returns a non-nil error for malformed usage
+// such as a missing required argument. It must depend only on the parsed
+// arguments and must not require a message or execution state.
+type TestValidator func(args *ast.Arguments) error
 
 // MatchTypeFunc compares an actual value against a key per the semantics
 // of a particular match-type tag (e.g. :is, :contains, :matches, :regex).
@@ -176,14 +189,15 @@ type comparatorEntry struct {
 
 func New() *Registry {
 	return &Registry{
-		actions:      map[string]actionEntry{},
-		tests:        map[string]testEntry{},
-		matchTypes:   map[string]matchTypeEntry{},
-		comparators:  map[string]comparatorEntry{},
-		addressParts: map[string]addressPartEntry{},
-		commands:     map[string]commandEntry{},
-		tags:         map[string]string{},
-		caps:         map[string]bool{},
+		actions:        map[string]actionEntry{},
+		tests:          map[string]testEntry{},
+		matchTypes:     map[string]matchTypeEntry{},
+		comparators:    map[string]comparatorEntry{},
+		addressParts:   map[string]addressPartEntry{},
+		commands:       map[string]commandEntry{},
+		tags:           map[string]string{},
+		testValidators: map[string]TestValidator{},
+		caps:           map[string]bool{},
 	}
 }
 
@@ -254,6 +268,25 @@ func (r *Registry) RegisterTest(name string, fn TestFunc, requires string) {
 	if requires != "" {
 		r.caps[requires] = true
 	}
+}
+
+// RegisterTestValidator records an optional compile-time argument
+// validator for the named test (see TestValidator). Registering a
+// validator is independent of RegisterTest, so an extension may override a
+// test's handler without disturbing its validator (and vice versa).
+func (r *Registry) RegisterTestValidator(name string, fn TestValidator) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.testValidators[name] = fn
+}
+
+// LookupTestValidator returns the compile-time argument validator for the
+// named test, if one was registered.
+func (r *Registry) LookupTestValidator(name string) (TestValidator, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	fn, ok := r.testValidators[name]
+	return fn, ok
 }
 
 // LookupAction returns the action and its required capability.

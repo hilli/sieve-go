@@ -14,9 +14,12 @@ import (
 // recHandler captures action calls.
 type recHandler struct{ actions []string }
 
-func (r *recHandler) Keep() error              { r.actions = append(r.actions, "keep"); return nil }
-func (r *recHandler) Discard() error           { r.actions = append(r.actions, "discard"); return nil }
-func (r *recHandler) Redirect(a string) error  { r.actions = append(r.actions, "redirect:"+a); return nil }
+func (r *recHandler) Keep() error    { r.actions = append(r.actions, "keep"); return nil }
+func (r *recHandler) Discard() error { r.actions = append(r.actions, "discard"); return nil }
+func (r *recHandler) Redirect(a string) error {
+	r.actions = append(r.actions, "redirect:"+a)
+	return nil
+}
 
 func compile(t *testing.T, src string) *Script {
 	t.Helper()
@@ -161,7 +164,7 @@ func TestEvalTrueFalseNotAllofAnyof(t *testing.T) {
 		{`if true { redirect "t"; }`, "redirect:t"},
 		{`if not false { redirect "nf"; }`, "redirect:nf"},
 		{`if allof(true, true) { redirect "all"; }`, "redirect:all"},
-		{`if allof(true, false) { discard; }`, "keep"},        // implicit
+		{`if allof(true, false) { discard; }`, "keep"}, // implicit
 		{`if anyof(false, true) { redirect "any"; }`, "redirect:any"},
 		{`if anyof(false, false) { discard; }`, "keep"},
 	}
@@ -258,21 +261,26 @@ func TestAddressLocalDomain(t *testing.T) {
 
 func TestSizeArgErrors(t *testing.T) {
 	for _, src := range []string{
-		`if size "x" { keep; }`,       // wrong type
-		`if size 100 { keep; }`,       // no :over/:under
+		`if size "x" { keep; }`, // wrong type
+		`if size 100 { keep; }`, // no :over/:under
 	} {
-		s := compile(t, src)
-		err := s.Run(emptyMsg(), &recHandler{})
-		if err == nil {
-			t.Errorf("expected error for %q", src)
+		a, err := parser.Parse(src)
+		if err != nil {
+			t.Fatalf("parse %q: %v", src, err)
+		}
+		if err := New().Validate(a); err == nil {
+			t.Errorf("expected validation error for %q", src)
 		}
 	}
 }
 
 func TestSizeWrongArgCount(t *testing.T) {
-	// Two positionals should error.
-	s := compile(t, `if size :over 1 1 { keep; }`)
-	if err := s.Run(emptyMsg(), &recHandler{}); err == nil {
+	// Two positionals should error at validation time.
+	a, err := parser.Parse(`if size :over 1 1 { keep; }`)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if err := New().Validate(a); err == nil {
 		t.Fatal("expected size arity error")
 	}
 }
@@ -282,7 +290,7 @@ func TestUnknownActionAtRuntime(t *testing.T) {
 	// build a Script with an unknown command name, exec returns an
 	// error. We do this by skipping validation.
 	s := &Script{
-		ast: &ast.Script{Commands: []*ast.Command{{Name: "phantom"}}},
+		ast:    &ast.Script{Commands: []*ast.Command{{Name: "phantom"}}},
 		interp: New(),
 	}
 	err := s.Run(emptyMsg(), &recHandler{})
