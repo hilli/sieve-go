@@ -26,8 +26,8 @@ func (e *Error) Error() string {
 }
 
 type Parser struct {
-	l   *lexer.Lexer
-	cur token.Token
+	l    *lexer.Lexer
+	cur  token.Token
 	peek token.Token
 }
 
@@ -48,7 +48,7 @@ func (p *Parser) advance() {
 	p.peek = p.l.NextToken()
 }
 
-func (p *Parser) errf(t token.Token, format string, args ...interface{}) *Error {
+func (p *Parser) errf(t token.Token, format string, args ...any) *Error {
 	return &Error{Line: t.Line, Col: t.Col, Msg: fmt.Sprintf(format, args...)}
 }
 
